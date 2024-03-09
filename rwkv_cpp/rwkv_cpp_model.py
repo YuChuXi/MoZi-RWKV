@@ -324,5 +324,5 @@ class RWKVModel:
     def _get_data_ptr(self, tensor: np.ndarray):
         return tensor.ctypes.data
 
-    def _zeros_float32(self, element_count: int, use_numpy: bool) -> np.ndarray:
+    def _zeros_float32(self, element_count: int) -> np.ndarray:
         return np.zeros(element_count, dtype=np.float32)

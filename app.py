@@ -3,7 +3,7 @@ import time, random, re
 from flask import jsonify
 from waitress import serve
 from flask import Flask, request
-from rwkv_chat import ChatRWKV, process_default_state
+from rwkv import RWKVChat, process_default_state
 from app_util import prxxx, gen_echo, clean_symbols
 
 
@@ -14,7 +14,7 @@ with open("help.min.html", "r") as f:
     flask_help = f.read()
 
 random.seed(time.time())
-RWKVs: dict[str:ChatRWKV] = {}
+RWKVs: dict[str:RWKVChat] = {}
 process_default_state()
 
 
@@ -34,7 +34,7 @@ def message():
     echo = gen_echo()
     prxxx()
     if not id in RWKVs:
-        RWKVs[id] = ChatRWKV(id, state_name=state)
+        RWKVs[id] = RWKVChat(id, state_name=state)
     prxxx(f" #    Chat id:{id} user:{user} echo:{echo}")
     prxxx(f" #    -->[{req_msg}]-{echo}")
     bak_msg = RWKVs[id].chat(
@@ -53,7 +53,7 @@ def cleanstate():
     try:
         id:str = request.args["id"]
         if not id in RWKVs:
-            RWKVs[id] = ChatRWKV(id)
+            RWKVs[id] = RWKVChat(id)
         RWKVs[id].reset()
         return jsonify({"state": "ok"})
     except:
@@ -68,7 +68,7 @@ def index():
 
 
 def test():
-    RWKVs["init"] = ChatRWKV("init")
+    RWKVs["init"] = RWKVChat("init")
     prxxx(f"State size:{RWKVs['init'].state.size}")
     prxxx(f"State shape:{RWKVs['init'].state.shape}")
     RWKVs["init"].reset()
@@ -81,6 +81,10 @@ def test():
 # 启动APP
 if __name__ == "__main__":
     test()
+    prxxx()
+    prxxx(" *#*   RWKV！高性能ですから!   *#*")
+    prxxx()
+
     prxxx("Web api server start!\a")
     serve(app, host="0.0.0.0", port=8088,threads=8)
     # app.run(host="0.0.0.0", port=8088, debug=False)

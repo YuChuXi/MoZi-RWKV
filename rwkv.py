@@ -1,6 +1,6 @@
 # Provides terminal-based chat interface for RWKV model.
 # Usage: python chat_with_bot.py C:\rwkv.cpp-169M.bin
-# Prompts and code adapted from https://github.com/BlinkDL/ChatRWKV/blob/9ca4cdba90efaee25cfec21a0bae72cbd48d8acd/chat.py
+# Prompts and code adapted from https://github.com/Blink/bloEmbryo:/9ca4cdba90efaee25cfec21a0bae72cbd48d8acd/chat.py
 
 import os
 import pickle
@@ -9,12 +9,14 @@ import tqdm
 import time
 import numpy as np
 import sampling
+import multiprocessing
 from threading import Lock
 from rwkv_cpp import rwkv_cpp_shared_library, rwkv_cpp_model
-from rwkv_cpp.rwkv_world_tokenizer import WorldTokenizer
-#from tokenizer_util import get_tokenizer
+from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
+
+# from tokenizer_util import get_tokenizer
 from typing import List, Dict, Optional
-from app_util import prxxx, clean_symbols
+from app_util import prxxx, check_dir
 
 # ======================================== Script settings ========================================
 
@@ -39,8 +41,7 @@ FREQUENCY_PENALTY: float = 2.1
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
 END_OF_TEXT_TOKEN: int = 0
 
-np.random.seed(int(time.time()*1e6%2**30))
-# =================================================================================================
+np.random.seed(int(time.time() * 1e6 % 2**30))
 
 model_name = "RWKV-5-World-3B-Q4_0-v2l"
 model_name = "RWKV-5-Qun-1B5-Q4_0"
@@ -58,7 +59,7 @@ library = rwkv_cpp_shared_library.load_rwkv_shared_library()
 prxxx(f"System info: {library.rwkv_get_system_info_string()}")
 
 prompt_config = f"prompt/{LANGUAGE}-{PROMPT_TYPE}.json"
-prxxx(f"Loading RWKV prompt config:{prompt_config}")
+prxxx(f"Loading RWKV prompt config: {prompt_config}")
 with open(prompt_config, "r", encoding="utf8") as json_file:
     prompt_data = json.load(json_file)
     user, bot, separator, default_init_prompt = (
@@ -73,96 +74,102 @@ with open(prompt_config, "r", encoding="utf8") as json_file:
 assert default_init_prompt != "", "Prompt must not be empty"
 
 
-prxxx(f"Loading RWKV model:{model_path}")
-model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=4)
+prxxx(f"Loading RWKV model: {model_path}")
+model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=10)
 model_lock = Lock()
 
+check_dir("data")
 if os.path.isfile(f"data/tokenizer.pkl"):
-    prxxx(f"Loading tokenizer:data/tokenizer.pkl")
+    prxxx(f"Loading tokenizer: data/tokenizer.pkl")
     with open(f"data/tokenizer.pkl", "rb") as f:
-        tokenizer:WorldTokenizer = pickle.load(f)
+        tokenizer: RWKV_TOKENIZER = pickle.load(f)
 else:
-    prxxx(f"Loading tokenizer:{tokenizer_dict}")
-    tokenizer:WorldTokenizer = WorldTokenizer(tokenizer_dict)
+    prxxx(f"Loading tokenizer: {tokenizer_dict}")
+    tokenizer: RWKV_TOKENIZER = RWKV_TOKENIZER(tokenizer_dict)
     with open(f"data/tokenizer.pkl", "wb") as f:
-        pickle.dump(tokenizer,f)
+        pickle.dump(tokenizer, f)
 
 # =================================================================================================
 
 
-class ChatRWKV:
+class RWKVEmbryo:
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
-            f"Init RWKV id:{id} state:{state_name} prompt:{'None' if prompt is None else prompt.strip().splitlines()[0]}"
+            f"Init RWKV id:{id} state: {state_name} prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
         )
         self.id: str = str(id)
+        check_dir(f"data/{id}")
+
         self.default_state: str = state_name
         self.logits: np.ndarray = None
         self.state: np.ndarray = None
         self.processed_tokens: List[int] = []
         self.processed_tokens_counts: Dict[int, int] = {}
-        self.process_lock:Lock = Lock() 
-        self.mlog = open(f"data/history/{self.id}.mlog", "ab+")
-        self.plog = open(f"data/history/{self.id}.plog", "a+")
+        self.process_lock: Lock = Lock()
+        self.mlog = open(f"data/{self.id}/model.log", "ab+")
+        self.ulog = open(f"data/{self.id}/user.log", "a+")
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
+
         self.load_state(self.id, prompt)
 
     def __del__(self):
         self.mlog.close()
-        self.plog.close()
+        self.ulog.close()
 
-    def load_state(
-        self, state_name: str, prompt: str = None, is_load_default_state=False
-    ):
+    def load_state(self, state_name: str, prompt: str = None):
         if prompt is not None:
             prompt_tokens = tokenizer.encode(prompt)
-            prxxx(f"Process prompt tokens, length:{len(prompt_tokens)}tok")
+            prxxx(f"Process prompt tokens, length: {len(prompt_tokens)} tok")
             ltime = time.time()
             self.process_tokens(prompt_tokens)
-            prxxx(f"Processed prompt tokens, used:{int(time.time()-ltime)}s")
+            prxxx(f"Processed prompt tokens, used: {int(time.time()-ltime)} s")
             self.save_state(self.default_state)
-            prxxx(f"Save state:{self.default_state}")
-
-        elif os.path.isfile(f"data/{state_name}.pkl"):
-            prxxx(f"Load state:{state_name}")
-            with open(f"data/{state_name}.pkl", "rb") as f:
-                data = pickle.load(f)
-                self.processed_tokens: List[int] = data["processed_tokens"]
-                self.logits: np.ndarray = data["logits"]
-                self.state: np.ndarray = data["state"]
-                self.processed_tokens_counts: Dict[int, int] = data[
-                    "processed_tokens_counts"
-                ]
-        elif (not is_load_default_state) and os.path.isfile(
-            f"data/{self.default_state}.pkl"
-        ):
-            self.load_state(self.default_state, is_load_default_state=True)
+            prxxx(f"Save state: {self.default_state}")
+            self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
         else:
-            self.load_state(model_state_name, is_load_default_state=True)
+            state_names = [self.default_state, model_state_name]
+            if state_name is not None:
+                state_names = [state_name] + state_names
 
-        self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
+            for state_name in state_names:
+                if not os.path.isfile(f"data/{state_name}/tokens.pkl"):
+                    continue
+
+                prxxx(f"Load state: {state_name}")
+                with open(f"data/{state_name}/tokens.pkl", "rb") as f:
+                    data = pickle.load(f)
+                    self.processed_tokens: List[int] = data["processed_tokens"]
+                    self.logits: np.ndarray = data["logits"]
+                    
+                    self.processed_tokens_counts: Dict[int, int] = data[
+                        "processed_tokens_counts"
+                    ]
+                self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
+
+            self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
         self.mlog.flush()
 
     def save_state(self, state_name: str):
-        with open(f"data/{state_name}.pkl", "wb") as f:
+        check_dir(f"data/{state_name}")
+        with open(f"data/{state_name}/tokens.pkl", "wb") as f:
             pickle.dump(
                 {
                     "processed_tokens": self.processed_tokens,
                     "logits": self.logits,
-                    "state": self.state,
                     "processed_tokens_counts": self.processed_tokens_counts,
                 },
                 f,
             )
+        np.save(f"data/{state_name}/state.npy",self.state)
         self.mlog.flush()
-        self.plog.flush()
+        self.ulog.flush()
 
     def reset(self):
-        self.load_state(self.default_state, is_load_default_state=True)
-        self.plog.write(" : Reset")
+        self.load_state(self.default_state)
+        self.ulog.write(" : Reset")
         self.save_state(self.id)
-        
+
     def check_state(self):
         return
         l = self.logits
@@ -217,24 +224,28 @@ class ChatRWKV:
             tokens, desc="Processing prompt", leave=False, unit=" tok"
         ):
             with model_lock:
-                model.eval(token, self.state, self.state, self.logits)
+                self.logits, self.state = model.eval(
+                    token, self.state, self.state, self.logits
+                )
             self.process_processed_tokens_counts(token)
             self.check_state()
         # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
-        self.mlog.write(tokenizer.decode_bytes(tokens))
+        self.mlog.write(tokenizer.decodeBytes(tokens))
 
     def process_token(self, token: int, new_line_logit_bias: float = 0.0) -> None:
         with model_lock:
-            model.eval(token, self.state, self.state, self.logits)
+            self.logits, self.state = model.eval(
+                token, self.state, self.state, self.logits
+            )
 
         self.process_processed_tokens_counts(token)
         # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
         self.check_state()
-        self.mlog.write(tokenizer.decode_bytes([token]))
+        self.mlog.write(tokenizer.decodeBytes([token]))
 
     """
     # Model only saw '\n\n' as [187, 187] before, but the tokenizer outputs [535] for it at the end.
-    # See https://github.com/BlinkDL/ChatRWKV/pull/110/files
+    # See https://github.com/Blink/pulEmbryo:/110/files
 
 
     def split_last_end_of_line(self, tokens: List[int]) -> List[int]:
@@ -244,6 +255,11 @@ class ChatRWKV:
         return tokens
     """
 
+
+class RWKVChat(RWKVEmbryo):
+    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+        super().__init__(id, state_name, prompt)
+
     def chat(
         self,
         msg: str,
@@ -251,28 +267,19 @@ class ChatRWKV:
         nickname: str = bot,
         show_user_to_model: bool = False,
     ):
-        self.plog.write(f"{chatuser}: {msg}\n")
+        self.ulog.write(f"{chatuser}: {msg}\n")
         temperature: float = TEMPERATURE
         top_p: float = TOP_P
 
         if "-temp=" in msg:
             temperature = float(msg.split("-temp=")[1].split(" ")[0])
-
             msg = msg.replace("-temp=" + f"{temperature:g}", "")
-
-            if temperature <= 0.2:
-                temperature = 0.2
-
-            if temperature >= 5:
-                temperature = 5
+            temperature = max(0.2, min(temperature, 5.0))
 
         if "-top_p=" in msg:
             top_p = float(msg.split("-top_p=")[1].split(" ")[0])
-
             msg = msg.replace("-top_p=" + f"{top_p:g}", "")
-
-            if top_p <= 0:
-                top_p = 0
+            top_p = max(0.2, min(top_p, 5.0))
 
         if "+reset" in msg:
             self.reset()
@@ -290,7 +297,10 @@ class ChatRWKV:
             answer: bytes = b""
             start_index: int = len(self.processed_tokens)
             for i in tqdm.trange(
-                MAX_GENERATION_LENGTH, desc="Processing future", leave=False, unit=" tok"
+                MAX_GENERATION_LENGTH,
+                desc="Processing future",
+                leave=False,
+                unit=" tok",
             ):
                 self.process_token_penalty()
                 token: int = sampling.sample_logits(self.logits, temperature, top_p)
@@ -300,25 +310,24 @@ class ChatRWKV:
                 else:
                     self.process_token(token)
 
-                answer += tokenizer.decode_bytes([token])
+                answer += tokenizer.decodeBytes([token])
                 if b"\n\n" in answer:
                     break
-        
+
         answer = answer.decode("utf-8").strip()
         if not show_user_to_model:  # 把昵称和用户名换回去
             answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
 
-        self.plog.write(f"{nickname}: {answer}\n")
+        self.ulog.write(f"{nickname}: {answer}\n")
         self.save_state(self.id)
         return answer
 
 
 def process_default_state():
-    if os.path.isfile(f"data/{model_state_name}.pkl"):
+    if os.path.isfile(f"data/{model_state_name}/tokens.pkl"):
         prxxx("Default state was processed")
     else:
-        ChatRWKV(id="model", state_name=model_state_name, prompt=default_init_prompt)
-    prxxx()
-    prxxx(" *#*   RWKV！高性能ですから!   *#*")
-    prxxx()
+        RWKVChat(
+            id="chat-model", state_name=model_state_name, prompt=default_init_prompt
+        )

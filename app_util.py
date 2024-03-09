@@ -1,4 +1,4 @@
-import time, re, random
+import time, re, random, os
 
 def prxxx(*args, **kwargs):
     print(
@@ -13,3 +13,7 @@ def clean_symbols(s):
 
 def gen_echo():
     return "%4.x"%random.randint(0,65535)
+
+def check_dir(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)
