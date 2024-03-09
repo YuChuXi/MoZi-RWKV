@@ -34,10 +34,11 @@ PRPEAT_PENALTY: float = 1.12
 # a?
 PENALTY_MITIGATE: float = 1.05
 
-
 # END_OF_LINE_TOKEN: int = 187
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
 END_OF_TEXT_TOKEN: int = 0
+
+THREADS: int = 4
 
 np.random.seed(int(time.time() * 1e6 % 2**30))
 
@@ -56,7 +57,7 @@ library = rwkv_cpp_shared_library.load_rwkv_shared_library()
 prxxx(f"System info: {library.rwkv_get_system_info_string()}")
 
 prxxx(f"Loading RWKV model: {model_path}")
-model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=10)
+model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=THREADS)
 model_lock = Lock()
 
 check_dir("data")
