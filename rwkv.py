@@ -24,11 +24,13 @@ MAX_GENERATION_LENGTH: int = 128
 # Sampling temperature. It could be a good idea to increase temperature when top_p is low.
 TEMPERATURE: float = 1.0
 # For better Q&A accuracy and less diversity, reduce top_p (to 0.5, 0.2, 0.1 etc.)
-TOP_P: float = 0.7
+TOP_P: float = 0.9
 # Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
 PRESENCE_PENALTY: float = 1.7
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
 FREQUENCY_PENALTY: float = 2.1
+# When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 0.8-0.97 is a good idea.
+PRPEAT_PENALTY: float = 0.91
 
 # END_OF_LINE_TOKEN: int = 187
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
@@ -85,6 +87,7 @@ class RWKVEmbryo:
         self.ulog = open(f"data/{self.id}/user.log", "a+")
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
+        self.repeat_penalty: float = PRPEAT_PENALTY
 
         self.load_state(self.id, prompt)
 
@@ -92,8 +95,12 @@ class RWKVEmbryo:
         self.mlog.close()
         self.ulog.close()
 
-    def load_state(self, state_name: str, prompt: str = None, reprompt = False, q: bool = False):
-        if (prompt is not None) and (reprompt or (not check_file(f"data/{self.default_state}/tokens.pkl"))):
+    def load_state(
+        self, state_name: str, prompt: str = None, reprompt=False, q: bool = False
+    ):
+        if (prompt is not None) and (
+            reprompt or (not check_file(f"data/{self.default_state}/tokens.pkl"))
+        ):
             prompt_tokens = tokenizer.encode(prompt)
             prxxx(f"Process prompt tokens, length: {len(prompt_tokens)} tok", q=q)
             ltime = time.time()
@@ -143,7 +150,7 @@ class RWKVEmbryo:
         self.ulog.flush()
 
     def reset(self, quiet: bool = False, q: bool = False):
-        self.load_state(self.id, q=q)
+        self.load_state(self.default_state, q=q)
         self.ulog.write(" : Reset")
         self.save_state(self.id, q=q)
 
@@ -185,7 +192,12 @@ class RWKVEmbryo:
             self.logits[token] -= (
                 self.presence_penalty
                 + self.processed_tokens_counts[token] * self.frequency_penalty
-            )
+            ) # 传统惩罚
+
+            self.logits[token] = min(
+                self.logits[token],
+                self.logits[token] * self.repeat_penalty ** self.processed_tokens_counts[token],
+            ) # 新惩罚
 
     def process_tokens(
         self, tokens: List[int], new_line_logit_bias: float = 0.0
