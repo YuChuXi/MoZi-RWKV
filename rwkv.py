@@ -9,22 +9,15 @@ import tqdm
 import time
 import numpy as np
 import sampling
-import multiprocessing
 from threading import Lock
 from rwkv_cpp import rwkv_cpp_shared_library, rwkv_cpp_model
 from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
 
 # from tokenizer_util import get_tokenizer
 from typing import List, Dict, Optional
-from app_util import prxxx, check_dir
+from app_util import prxxx, check_dir, check_file
 
 # ======================================== Script settings ========================================
-
-# English, Chinese, Japanese
-LANGUAGE: str = "Chinese"
-# QA: Question and Answer prompt to talk to an AI assistant.
-# Chat: chat prompt (need a large model for adequate quality, 7B+).
-PROMPT_TYPE: str = "Chat-MoZi-N"
 
 MAX_GENERATION_LENGTH: int = 128
 
@@ -53,33 +46,16 @@ model_state_path = f"data/{model_state_name}.pkl"
 
 tokenizer_dict = "rwkv_cpp/rwkv_vocab_v20230424.txt"
 
-# =================================================================================================
 
 library = rwkv_cpp_shared_library.load_rwkv_shared_library()
 prxxx(f"System info: {library.rwkv_get_system_info_string()}")
-
-prompt_config = f"prompt/{LANGUAGE}-{PROMPT_TYPE}.json"
-prxxx(f"Loading RWKV prompt config: {prompt_config}")
-with open(prompt_config, "r", encoding="utf8") as json_file:
-    prompt_data = json.load(json_file)
-    user, bot, separator, default_init_prompt = (
-        prompt_data["user"],
-        prompt_data["bot"],
-        prompt_data["separator"],
-        prompt_data["prompt"],
-    )
-    if os.path.isfile(default_init_prompt):
-        with open(default_init_prompt, "rb") as f:
-            default_init_prompt = f.read().decode("utf-8")
-assert default_init_prompt != "", "Prompt must not be empty"
-
 
 prxxx(f"Loading RWKV model: {model_path}")
 model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=10)
 model_lock = Lock()
 
 check_dir("data")
-if os.path.isfile(f"data/tokenizer.pkl"):
+if check_file(f"data/tokenizer.pkl"):
     prxxx(f"Loading tokenizer: data/tokenizer.pkl")
     with open(f"data/tokenizer.pkl", "rb") as f:
         tokenizer: RWKV_TOKENIZER = pickle.load(f)
@@ -89,9 +65,8 @@ else:
     with open(f"data/tokenizer.pkl", "wb") as f:
         pickle.dump(tokenizer, f)
 
+
 # =================================================================================================
-
-
 class RWKVEmbryo:
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
@@ -117,15 +92,15 @@ class RWKVEmbryo:
         self.mlog.close()
         self.ulog.close()
 
-    def load_state(self, state_name: str, prompt: str = None):
-        if prompt is not None:
+    def load_state(self, state_name: str, prompt: str = None, reprompt = False, q: bool = False):
+        if (prompt is not None) and (reprompt or (not check_file(f"data/{self.default_state}/tokens.pkl"))):
             prompt_tokens = tokenizer.encode(prompt)
-            prxxx(f"Process prompt tokens, length: {len(prompt_tokens)} tok")
+            prxxx(f"Process prompt tokens, length: {len(prompt_tokens)} tok", q=q)
             ltime = time.time()
             self.process_tokens(prompt_tokens)
-            prxxx(f"Processed prompt tokens, used: {int(time.time()-ltime)} s")
-            self.save_state(self.default_state)
-            prxxx(f"Save state: {self.default_state}")
+            prxxx(f"Processed prompt tokens, used: {int(time.time()-ltime)} s", q=q)
+            self.save_state(self.id, q=q)
+            self.save_state(self.default_state, q=q)
             self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
         else:
             state_names = [self.default_state, model_state_name]
@@ -133,24 +108,26 @@ class RWKVEmbryo:
                 state_names = [state_name] + state_names
 
             for state_name in state_names:
-                if not os.path.isfile(f"data/{state_name}/tokens.pkl"):
+                if not check_file(f"data/{state_name}/tokens.pkl"):
                     continue
 
-                prxxx(f"Load state: {state_name}")
+                prxxx(f"Load state: {state_name}", q=q)
                 with open(f"data/{state_name}/tokens.pkl", "rb") as f:
                     data = pickle.load(f)
                     self.processed_tokens: List[int] = data["processed_tokens"]
                     self.logits: np.ndarray = data["logits"]
-                    
+
                     self.processed_tokens_counts: Dict[int, int] = data[
                         "processed_tokens_counts"
                     ]
                 self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
+                break
 
             self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
         self.mlog.flush()
 
-    def save_state(self, state_name: str):
+    def save_state(self, state_name: str, q: bool = False):
+        prxxx(f"Save state: {state_name}", q=q)
         check_dir(f"data/{state_name}")
         with open(f"data/{state_name}/tokens.pkl", "wb") as f:
             pickle.dump(
@@ -161,14 +138,14 @@ class RWKVEmbryo:
                 },
                 f,
             )
-        np.save(f"data/{state_name}/state.npy",self.state)
+        np.save(f"data/{state_name}/state.npy", self.state)
         self.mlog.flush()
         self.ulog.flush()
 
-    def reset(self):
-        self.load_state(self.default_state)
+    def reset(self, quiet: bool = False, q: bool = False):
+        self.load_state(self.id, q=q)
         self.ulog.write(" : Reset")
-        self.save_state(self.id)
+        self.save_state(self.id, q=q)
 
     def check_state(self):
         return
@@ -256,7 +233,32 @@ class RWKVEmbryo:
     """
 
 
-class RWKVChat(RWKVEmbryo):
+# ========================================= Chat settings =========================================
+
+# English, Chinese, Japanese
+language: str = "Chinese"
+# QA: Question and Answer prompt to talk to an AI assistant.
+# Chat: chat prompt (need a large model for adequate quality, 7B+).
+prompt_type: str = "Chat-MoZi-N"
+
+prompt_config = f"prompt/{language}-{prompt_type}.json"
+prxxx(f"Loading RWKV prompt config: {prompt_config}")
+with open(prompt_config, "r", encoding="utf8") as json_file:
+    prompt_data = json.load(json_file)
+    user, bot, separator, default_init_prompt = (
+        prompt_data["user"],
+        prompt_data["bot"],
+        prompt_data["separator"],
+        prompt_data["prompt"],
+    )
+    if check_file(default_init_prompt):
+        with open(default_init_prompt, "rb") as f:
+            default_init_prompt = f.read().decode("utf-8")
+assert default_init_prompt != "", "Prompt must not be empty"
+
+
+# =================================================================================================
+class RWKVChater(RWKVEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
 
@@ -295,7 +297,6 @@ class RWKVChat(RWKVEmbryo):
                 self.process_tokens(tokenizer.encode(new))
 
             answer: bytes = b""
-            start_index: int = len(self.processed_tokens)
             for i in tqdm.trange(
                 MAX_GENERATION_LENGTH,
                 desc="Processing future",
@@ -320,14 +321,71 @@ class RWKVChat(RWKVEmbryo):
         answer = answer.replace(bot, nickname).strip()
 
         self.ulog.write(f"{nickname}: {answer}\n")
-        self.save_state(self.id)
+        self.save_state(self.id, q=True)
+        return answer
+
+
+# ======================================== Gener settings =========================================
+prompt = """注: 
+以下是一张用户名与昵称的对照表，昵称是用户名中最具有特色的部分, 长度在五个字以内. 
+表格的每行由两部分组成, 分别是 "用户名" 和 "昵称", 在每一行中, 两个部分以 ":" 分隔. 
+如果一个用户名没有对应的昵称则以 "None" 填充. 
+
+用户名:昵称
+玉子是个废物喵:玉子
+沐沐:沐沐
+咦我的名字呢？:没名字的人
+YuChuXi:None
+墨子不是猫:墨子
+不想加班的朋朋:朋朋
+只有鱼骨头吃的喵:鱼骨头喵
+猫猫博士凌枫:猫猫博士
+
+"""
+
+
+# =================================================================================================
+class RWKVNicknameGener(RWKVEmbryo):
+    def __init__(self):
+        super().__init__("-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", prompt)
+
+    def gen_nickname(self, name):
+        self.ulog.write(f"{name}:")
+        temperature: float = TEMPERATURE
+        top_p: float = TOP_P
+
+        with self.process_lock:
+            new = f"{name}:"
+            self.process_tokens(tokenizer.encode(new))
+
+            answer: bytes = b""
+            for i in tqdm.trange(
+                MAX_GENERATION_LENGTH,
+                desc="Processing future",
+                leave=False,
+                unit=" tok",
+            ):
+                self.process_token_penalty()
+                token: int = sampling.sample_logits(self.logits, temperature, top_p)
+
+                if token == END_OF_TEXT_TOKEN:
+                    break
+                else:
+                    self.process_token(token)
+
+                answer += tokenizer.decodeBytes([token])
+                if b"\n" in answer:
+                    break
+
+        answer = answer.decode("utf-8").strip()
+        self.reset(q=True)
         return answer
 
 
 def process_default_state():
-    if os.path.isfile(f"data/{model_state_name}/tokens.pkl"):
+    if check_file(f"data/{model_state_name}/tokens.pkl"):
         prxxx("Default state was processed")
     else:
-        RWKVChat(
+        RWKVChater(
             id="chat-model", state_name=model_state_name, prompt=default_init_prompt
         )
