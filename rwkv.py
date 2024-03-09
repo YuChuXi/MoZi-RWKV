@@ -76,7 +76,7 @@ else:
 class RWKVEmbryo:
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
-            f"Init RWKV id:{id} state: {state_name} prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
+            f"Init RWKV id: {id} state: {state_name} prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
         )
         self.id: str = str(id)
         check_dir(f"data/{id}")
