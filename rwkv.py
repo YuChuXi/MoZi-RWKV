@@ -24,13 +24,16 @@ MAX_GENERATION_LENGTH: int = 128
 # Sampling temperature. It could be a good idea to increase temperature when top_p is low.
 TEMPERATURE: float = 1.0
 # For better Q&A accuracy and less diversity, reduce top_p (to 0.5, 0.2, 0.1 etc.)
-TOP_P: float = 0.9
+TOP_P: float = 0.7
 # Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
 PRESENCE_PENALTY: float = 1.7
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
 FREQUENCY_PENALTY: float = 2.1
-# When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 0.8-0.97 is a good idea.
-PRPEAT_PENALTY: float = 0.91
+# When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.2 is a good idea.
+PRPEAT_PENALTY: float = 1.12
+# a?
+PENALTY_MITIGATE: float = 1.05
+
 
 # END_OF_LINE_TOKEN: int = 187
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
@@ -88,6 +91,7 @@ class RWKVEmbryo:
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
         self.repeat_penalty: float = PRPEAT_PENALTY
+        self.penalty_mitigate:float = PENALTY_MITIGATE
 
         self.load_state(self.id, prompt)
 
@@ -180,7 +184,7 @@ class RWKVEmbryo:
     def process_processed_tokens_counts(self, token: int):
         self.processed_tokens += [token]
         for token in self.processed_tokens_counts:
-            self.processed_tokens_counts[token] *= 0.99
+            self.processed_tokens_counts[token] /= self.penalty_mitigate
 
         if token not in self.processed_tokens_counts:  # 词频统计
             self.processed_tokens_counts[token] = 1
@@ -196,7 +200,7 @@ class RWKVEmbryo:
 
             self.logits[token] = min(
                 self.logits[token],
-                self.logits[token] * self.repeat_penalty ** self.processed_tokens_counts[token],
+                self.logits[token] / self.repeat_penalty ** self.processed_tokens_counts[token],
             ) # 新惩罚
 
     def process_tokens(
