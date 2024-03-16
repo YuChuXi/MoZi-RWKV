@@ -93,7 +93,7 @@ class RWKVEmbryo:
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
         self.repeat_penalty: float = PRPEAT_PENALTY
-        self.penalty_mitigate:float = PENALTY_MITIGATE
+        self.penalty_mitigate: float = PENALTY_MITIGATE
 
         self.load_state(self.id, prompt)
 
@@ -198,12 +198,13 @@ class RWKVEmbryo:
             self.logits[token] -= (
                 self.presence_penalty
                 + self.processed_tokens_counts[token] * self.frequency_penalty
-            ) # 传统惩罚
+            )  # 传统惩罚
 
             self.logits[token] = min(
                 self.logits[token],
-                self.logits[token] / self.repeat_penalty ** self.processed_tokens_counts[token],
-            ) # 新惩罚
+                self.logits[token]
+                / self.repeat_penalty ** self.processed_tokens_counts[token],
+            )  # 新惩罚
 
     def process_tokens(
         self, tokens: List[int], new_line_logit_bias: float = 0.0

@@ -1,8 +1,8 @@
 import time, re, random, os
 
 
-def prxxx(*args,q: bool = False,  **kwargs):
-    if q :
+def prxxx(*args, q: bool = False, **kwargs):
+    if q:
         return
     print(
         time.strftime(
@@ -28,6 +28,7 @@ def gen_echo():
 def check_dir(path):
     if not os.path.isdir(path):
         os.makedirs(path)
+
 
 def check_file(path):
     return os.path.isfile(path)

@@ -5,6 +5,7 @@ from waitress import serve
 from flask import Flask, request
 from rwkv import RWKVChater, RWKVNicknameGener, process_default_state
 from app_util import prxxx, gen_echo, clean_symbols
+from typing import Dict
 
 
 test_msg = """告诉我关于你的一切。"""
@@ -14,7 +15,7 @@ with open("help.min.html", "r") as f:
     flask_help = f.read()
 
 random.seed(time.time())
-chaters: dict[str:RWKVChater] = {}
+chaters: Dict[str,RWKVChater] = {}
 process_default_state()
 nicknameGener = RWKVNicknameGener()
 

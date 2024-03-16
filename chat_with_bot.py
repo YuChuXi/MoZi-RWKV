@@ -125,7 +125,7 @@ class ChatRWKV():
             print(f"State will use data/{state_name}.pkl, load...", end="", flush=True)
             with open(f"data/{state_name}.pkl", "rb") as f:
                 data = pickle.load(f)
-                self.processed_tokens: list[int] = data["processed_tokens"]
+                self.processed_tokens: List[int] = data["processed_tokens"]
                 self.logits: Optional[torch.Tensor] = data["logits"]
                 self.state: Optional[torch.Tensor] = data["state"]
         else:
