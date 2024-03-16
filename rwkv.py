@@ -347,18 +347,31 @@ class RWKVChater(RWKVEmbryo):
 # ======================================== Gener settings =========================================
 prompt = """注: 
 以下是一张用户名与昵称的对照表，昵称是用户名中最具有特色的部分, 长度在五个字以内. 
-表格的每行由两部分组成, 分别是 "用户名" 和 "昵称", 在每一行中, 两个部分以 ":" 分隔. 
 如果一个用户名没有对应的昵称则以 "None" 填充. 
 
-用户名:昵称
-玉子是个废物喵:玉子
-沐沐:沐沐
-咦我的名字呢？:没名字的人
-YuChuXi:None
-墨子不是猫:墨子
-不想加班的朋朋:朋朋
-只有鱼骨头吃的喵:鱼骨头喵
-猫猫博士凌枫:猫猫博士
+用户名: 玉子是个废物喵
+昵称: 玉子
+
+用户名: 沐沐
+昵称: 沐沐
+
+用户名: 咦我的名字呢？
+昵称: 没名字的人
+
+用户名: YuChuXi
+昵称: None
+
+用户名: 墨子不是猫
+昵称: 墨子
+
+用户名: 不想加班的朋朋
+昵称: 朋朋
+
+用户名: 只有鱼骨头吃的喵
+昵称: 鱼骨头喵
+
+用户名: 猫猫博士凌枫
+昵称: 猫猫博士
 
 """
 
@@ -369,12 +382,12 @@ class RWKVNicknameGener(RWKVEmbryo):
         super().__init__("-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", prompt)
 
     def gen_nickname(self, name):
-        self.ulog.write(f"{name}:")
+        self.ulog.write(f"用户名: {name}\n昵称: ")
         temperature: float = TEMPERATURE
         top_p: float = TOP_P
 
         with self.process_lock:
-            new = f"{name}:"
+            new = f"用户名: {name}\n昵称: "
             self.process_tokens(tokenizer.encode(new))
 
             answer: bytes = b""
@@ -393,7 +406,7 @@ class RWKVNicknameGener(RWKVEmbryo):
                     self.process_token(token)
 
                 answer += tokenizer.decodeBytes([token])
-                if b"\n" in answer:
+                if b"\n\n" in answer:
                     break
 
         answer = answer.decode("utf-8").strip()
