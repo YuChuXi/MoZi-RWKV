@@ -3,9 +3,11 @@ from typing import Callable
 
 def prxxx(*args, q: bool = False, from_debug=False, **kwargs):
     if q:
-        pass  # return
+        return
+        pass
     if from_debug:
-        pass  # return
+        return
+        pass
     print(
         time.strftime(
             "RWKV [\033[33m%Y-%m-%d %H:%M:%S\033[0m] \033[0m", time.localtime()

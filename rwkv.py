@@ -29,8 +29,8 @@ TOP_P: float = 0.5
 PRESENCE_PENALTY: float = 1.7
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
 FREQUENCY_PENALTY: float = 2.1
-# When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.2 is a good idea.
-PRPEAT_PENALTY: float = 1.18
+# When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.5 is a good idea.
+PRPEAT_PENALTY: float = 1.2
 # a?
 PENALTY_MITIGATE: float = 1.05
 
@@ -38,7 +38,7 @@ PENALTY_MITIGATE: float = 1.05
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
 END_OF_TEXT_TOKEN: int = 0
 
-THREADS: int = 4
+THREADS: int = 3
 
 np.random.seed(int(time.time() * 1e6 % 2**30))
 
@@ -167,6 +167,7 @@ class RWKVEmbryo:
 
     @log_call
     def check_state(self):
+        return
         logit = self.logits[self.logits >= 0]
         prxxx("logits", logit[-128:])
         prxxx("pedt", self.processed_tokens_counts)
@@ -209,7 +210,8 @@ class RWKVEmbryo:
             self.processed_tokens_counts[token] /= self.penalty_mitigate
 
     @log_call
-    def process_token_penalty_sample(self) -> int:
+    def process_token_penalty(self):
+        self.logits[END_OF_TEXT_TOKEN] = -1e9
         for token in self.processed_tokens_counts:
             self.logits[token] -= (
                 # 传统惩罚
@@ -217,8 +219,8 @@ class RWKVEmbryo:
                 + self.processed_tokens_counts[token] * self.frequency_penalty
                 # 新惩罚
                 + self.repeat_penalty ** self.processed_tokens_counts[token]
+                - 1
             )
-        return sampling.sample_logits(self.logits, self.temperature, self.top_p)
 
     @log_call
     def process_tokens(
@@ -336,14 +338,11 @@ class RWKVChater(RWKVEmbryo):
                 leave=False,
                 unit=" tok",
             ):
-                
-                token: int = self.process_token_penalty_sample()
-
-                if token == END_OF_TEXT_TOKEN:
-                    break
-                else:
-                    self.process_token(token)
-
+                self.process_token_penalty()
+                token: int = sampling.sample_logits(
+                    self.logits, self.temperature, self.top_p
+                )
+                self.process_token(token)
                 answer += tokenizer.decodeBytes([token])
                 if b"\n\n" in answer:
                     break
