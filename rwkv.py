@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Provides terminal-based chat interface for RWKV model.
 # Usage: python chat_with_bot.py C:\rwkv.cpp-169M.bin
 # Prompts and code adapted from https://github.com/Blink/bloEmbryo:/9ca4cdba90efaee25cfec21a0bae72cbd48d8acd/chat.py
@@ -284,7 +285,7 @@ prompt_type: str = "Chat-MoZi-N"
 
 prompt_config = f"prompt/{language}-{prompt_type}.json"
 prxxx(f"Loading RWKV prompt config: {prompt_config}")
-with open(prompt_config, "r", encoding="utf8") as json_file:
+with open(prompt_config, "r", encoding="utf-8") as json_file:
     prompt_data = json.load(json_file)
     user, bot, separator, default_init_prompt = (
         prompt_data["user"],

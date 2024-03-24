@@ -1,6 +1,6 @@
 {
     "user": "<user>",
     "bot": "墨子",
-    "separator": "：",
+    "separator": ":",
     "prompt": "prompt/mozi_v6.init"
 }

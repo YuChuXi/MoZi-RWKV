@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 import time, random, re
 from flask import jsonify
