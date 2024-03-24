@@ -94,7 +94,7 @@ class RWKVEmbryo:
         self.processed_tokens_counts: Dict[int, int] = {}
         self.process_lock: Lock = Lock()
         self.mlog = open(f"data/{self.id}/model.log", "ab+")
-        self.ulog = open(f"data/{self.id}/user.log", "a+")
+        self.ulog = open(f"data/{self.id}/user.log", "a+", encoding="utf-8")
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
         self.repeat_penalty: float = PRPEAT_PENALTY
