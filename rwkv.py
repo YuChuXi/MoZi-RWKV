@@ -278,6 +278,7 @@ language: str = "Chinese"
 # Chat: chat prompt (need a large model for adequate quality, 7B+).
 prompt_type: str = "Chat-MoZi-N"
 
+
 prompt_config = f"prompt/{language}-{prompt_type}.json"
 prxxx(f"Loading RWKV prompt config: {prompt_config}")
 with open(prompt_config, "r", encoding="utf8") as json_file:
@@ -359,32 +360,32 @@ class RWKVChater(RWKVEmbryo):
 
 # ======================================== Gener settings =========================================
 prompt = """注: 
-以下是一张用户名与昵称的对照表，昵称是用户名中最具有特色的部分, 长度在五个字以内. 
-如果一个用户名没有对应的昵称则以 "None" 填充. 
+以下是一张用户名与称呼的对照表，称呼是用户名中最具有特色的部分, 长度在五个字以内. 
 
 用户名: 玉子是个废物喵
-昵称: 玉子
+称呼: 玉子
 
 用户名: 沐沐
-昵称: 沐沐
+称呼: 沐沐
 
 用户名: 咦我的名字呢？
-昵称: 没名字的人
+称呼: 没名字
 
 用户名: YuChuXi
-昵称: None
+称呼: YuChuXi
 
 用户名: 墨子不是猫
-昵称: 墨子
+称呼: 墨子
 
 用户名: 不想加班的朋朋
-昵称: 朋朋
+称呼: 朋朋
 
 用户名: 只有鱼骨头吃的喵
-昵称: 鱼骨头喵
+称呼: 鱼骨头喵
 
 用户名: 猫猫博士凌枫
-昵称: 猫猫博士
+称呼: 猫猫博士
+
 
 """
 
@@ -395,12 +396,12 @@ class RWKVNicknameGener(RWKVEmbryo):
         super().__init__("-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", prompt)
 
     def gen_nickname(self, name):
-        self.ulog.write(f"用户名: {name}\n昵称: ")
+        self.ulog.write(f"用户名: {name}\n称呼: ")
         temperature: float = TEMPERATURE
         top_p: float = TOP_P
 
         with self.process_lock:
-            new = f"用户名: {name}\n昵称: "
+            new = f"用户名: {name}\n称呼: "
             self.process_tokens(tokenizer.encode(new))
 
             answer: bytes = b""
