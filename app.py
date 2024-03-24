@@ -6,7 +6,8 @@ from flask import Flask, request
 from rwkv import RWKVChater, RWKVNicknameGener, process_default_state
 from app_util import prxxx, gen_echo, clean_symbols
 from typing import Dict
-
+import signal
+import sys
 
 test_msg = """告诉我关于你的一切。"""
 
@@ -19,7 +20,16 @@ chaters: Dict[str,RWKVChater] = {}
 process_default_state()
 nicknameGener = RWKVNicknameGener()
 
+def save_chaters_state():
+    for id in chaters:
+        chaters[id].save_state(id)
 
+def signal_handler(signal, frame):
+    save_chaters_state()
+    sys.exit(0)
+
+def restart():
+    save_chaters_state()
 
 app = Flask(__name__)
 
@@ -103,8 +113,12 @@ def test():
     prxxx(f" #  {echo}-[{chaters['init'].chat(test_msg, chatuser = '测试者')}]<--")
 
 
+
+
+
 # 启动APP
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
     test()
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
