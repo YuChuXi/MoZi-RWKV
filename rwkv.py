@@ -77,24 +77,28 @@ else:
     with open(f"data/tokenizer.pkl", "wb") as f:
         pickle.dump(tokenizer, f)
 
+# ======================================== Embryo settings ========================================
+
+state_cache: Dict[str,Dict[str,object]]= {}
 
 # =================================================================================================
+        
 class RWKVEmbryo:
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
-            f"Init RWKV id: {id} state: {state_name} prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
+            f"Init RWKV id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
         )
-        self.id: str = str(id)
         check_dir(f"data/{id}")
 
+        self.id: str = str(id)
         self.default_state: str = state_name
+        self.process_lock: Lock = Lock()
+
         self.logits: np.ndarray = None
         self.state: np.ndarray = None
         self.processed_tokens: List[int] = []
         self.processed_tokens_counts: Dict[int, int] = {}
-        self.process_lock: Lock = Lock()
-        self.mlog = open(f"data/{self.id}/model.log", "ab+")
-        self.ulog = open(f"data/{self.id}/user.log", "a+", encoding="utf-8")
+
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
         self.repeat_penalty: float = PRPEAT_PENALTY
@@ -102,17 +106,20 @@ class RWKVEmbryo:
         self.temperature: float = TEMPERATURE
         self.top_p: float = TOP_P
 
+        self.mlog = open(f"data/{self.id}/model.log", "ab+")
+        self.ulog = open(f"data/{self.id}/user.log", "a+", encoding="utf-8")
         self.load_state(self.id, prompt)
 
     def __del__(self):
         self.mlog.close()
         self.ulog.close()
-        prxxx(f"Del RWKV id: {self.id}")
 
     @log_call
     def load_state(
         self, state_name: str, prompt: str = None, reprompt=False, q: bool = False
     ):
+        self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
+
         if (prompt is not None) and (
             reprompt or (not check_file(f"data/{self.default_state}/tokens.pkl"))
         ):
@@ -123,30 +130,33 @@ class RWKVEmbryo:
             prxxx(f"Processed prompt tokens, used: {int(time.time()-ltime)} s", q=q)
             self.save_state(self.id, q=q)
             self.save_state(self.default_state, q=q)
-            self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
-        else:
-            state_names = [self.default_state, model_state_name]
-            if state_name is not None:
-                state_names = [state_name] + state_names
+            return
 
-            for state_name in state_names:
+        state_names = [self.default_state, model_state_name]
+        if state_name is not None:
+            state_names = [state_name] + state_names
+
+        for state_name in state_names:
+
+            if (state_name != self.id) and (state_name in state_cache):
+                prxxx(f"Load state from cache: {state_name}", q=q)
+                data = state_cache[state_name].copy()
+            else:
                 if not check_file(f"data/{state_name}/tokens.pkl"):
                     continue
-
                 prxxx(f"Load state: {state_name}", q=q)
                 with open(f"data/{state_name}/tokens.pkl", "rb") as f:
-                    data = pickle.load(f)
-                    self.processed_tokens: List[int] = data["processed_tokens"]
-                    self.logits: np.ndarray = data["logits"]
+                    data: Dict[str, object] = pickle.load(f)
+                if state_name != self.id:
+                    state_cache[state_name] = data.copy()
 
-                    self.processed_tokens_counts: Dict[int, int] = data[
-                        "processed_tokens_counts"
-                    ]
-                self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
-                break
-
-            self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
-        self.mlog.flush()
+            self.processed_tokens: List[int] = data["processed_tokens"]
+            self.logits: np.ndarray = data["logits"]
+            self.processed_tokens_counts: Dict[int, int] = data[
+                "processed_tokens_counts"
+            ]
+            self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
+            break
 
     @log_call
     def save_state(self, state_name: str, q: bool = False):
@@ -162,8 +172,6 @@ class RWKVEmbryo:
                 f,
             )
         np.save(f"data/{state_name}/state.npy", self.state)
-        self.mlog.flush()
-        self.ulog.flush()
 
     @log_call
     def reset(self, quiet: bool = False, q: bool = False):
@@ -360,7 +368,7 @@ class RWKVChater(RWKVEmbryo):
         answer = answer.replace(bot, nickname).strip()
 
         self.ulog.write(f"{nickname}: {answer}\n")
-        self.save_state(self.id, q=True)
+        # self.save_state(self.id, q=True)
         return answer
 
 
@@ -400,11 +408,11 @@ prompt = """注:
 class RWKVNicknameGener(RWKVEmbryo):
     def __init__(self):
         super().__init__("-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", prompt)
+        self.temperature: float = TEMPERATURE
+        self.top_p: float = TOP_P
 
     def gen_nickname(self, name):
         self.ulog.write(f"用户名: {name}\n称呼: ")
-        temperature: float = TEMPERATURE
-        top_p: float = TOP_P
 
         with self.process_lock:
             new = f"用户名: {name}\n称呼: "
@@ -418,7 +426,7 @@ class RWKVNicknameGener(RWKVEmbryo):
                 unit=" tok",
             ):
                 self.process_token_penalty()
-                token: int = sampling.sample_logits(self.logits, temperature, top_p)
+                token: int = sampling.sample_logits(self.logits, self.temperature, self.top_p)
 
                 if token == END_OF_TEXT_TOKEN:
                     break
