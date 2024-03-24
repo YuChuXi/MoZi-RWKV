@@ -127,7 +127,7 @@ def get_world_tokenizer_v20230424() -> Tuple[
 
 class RWKV_TOKENIZER():
     table: List[List[List[bytes]]]
-    good: List[set[int]]
+    good: List[Set[int]]
     wlen: List[int]
     def __init__(self, file_name):
         self.idx2token = {}

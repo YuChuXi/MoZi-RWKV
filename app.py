@@ -1,4 +1,4 @@
-
+# -*- coding: utf-8 -*-
 import time, random, re, sys, os
 from flask import jsonify
 from waitress import serve

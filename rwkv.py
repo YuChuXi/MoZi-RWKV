@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Provides terminal-based chat interface for RWKV model.
 # Usage: python chat_with_bot.py C:\rwkv.cpp-169M.bin
 # Prompts and code adapted from https://github.com/Blink/bloEmbryo:/9ca4cdba90efaee25cfec21a0bae72cbd48d8acd/chat.py
@@ -26,25 +27,29 @@ TEMPERATURE: float = 1.0
 # For better Q&A accuracy and less diversity, reduce top_p (to 0.5, 0.2, 0.1 etc.)
 TOP_P: float = 0.5
 # Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
-PRESENCE_PENALTY: float = 1.7
+PRESENCE_PENALTY: float = 0.7
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
-FREQUENCY_PENALTY: float = 2.1
-# When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.5 is a good idea.
-PRPEAT_PENALTY: float = 1.2
+
+FREQUENCY_PENALTY: float = 1.0
+# When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.2 is a good idea.
+PRPEAT_PENALTY: float = 1.05
+
 # a?
-PENALTY_MITIGATE: float = 1.05
+PENALTY_MITIGATE: float = 1.02
 
 # END_OF_LINE_TOKEN: int = 187
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
 END_OF_TEXT_TOKEN: int = 0
 
-THREADS: int = 3
+THREADS: int = 8
+
 
 np.random.seed(int(time.time() * 1e6 % 2**30))
 
 model_name = "RWKV-5-Qun-1B5-Q4_0"
 model_name = "RWKV-5-World-3B-Q5_0-v2"
 model_name = "RWKV-5-World-1B5-Q5_1-v2"
+model_name = "RWKV-5-World-7B-Q5_1-v2"
 
 model_path = f"model/{model_name}.bin"
 
@@ -89,7 +94,7 @@ class RWKVEmbryo:
         self.processed_tokens_counts: Dict[int, int] = {}
         self.process_lock: Lock = Lock()
         self.mlog = open(f"data/{self.id}/model.log", "ab+")
-        self.ulog = open(f"data/{self.id}/user.log", "a+")
+        self.ulog = open(f"data/{self.id}/user.log", "a+", encoding="utf-8")
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
         self.repeat_penalty: float = PRPEAT_PENALTY
@@ -102,6 +107,7 @@ class RWKVEmbryo:
     def __del__(self):
         self.mlog.close()
         self.ulog.close()
+        prxxx(f"Del RWKV id: {self.id}")
 
     @log_call
     def load_state(
@@ -281,7 +287,7 @@ prompt_type: str = "Chat-MoZi-N"
 
 prompt_config = f"prompt/{language}-{prompt_type}.json"
 prxxx(f"Loading RWKV prompt config: {prompt_config}")
-with open(prompt_config, "r", encoding="utf8") as json_file:
+with open(prompt_config, "r", encoding="utf-8") as json_file:
     prompt_data = json.load(json_file)
     user, bot, separator, default_init_prompt = (
         prompt_data["user"],
