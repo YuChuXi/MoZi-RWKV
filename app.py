@@ -15,31 +15,40 @@ with open("help.min.html", "r") as f:
     flask_help = f.read()
 
 random.seed(time.time())
-chaters: Dict[str,RWKVChater] = {}
+chaters: Dict[str, RWKVChater] = {}
 process_default_state()
-#nicknameGener = RWKVNicknameGener()
+nicknameGener = RWKVNicknameGener()
+
 
 def save_chaters_state():
     for id in chaters:
         chaters[id].save_state(id)
 
-def signal_handler(signal, frame):
-    save_chaters_state()
-    sys.exit(0)
 
 def restart():
     save_chaters_state()
+    python = sys.executable
+    prxxx("### Restart ! ###")
+    os.execl(python, python, *sys.argv)
+
+
+def stop():
+    save_chaters_state(signal=None, frame=None)
+    prxxx("### STOP ! ###")
+    sys.exit(0)
+
 
 app = Flask(__name__)
 
+
 @app.route("/chat", methods=["POST"])
 def chat():
-    req_msg:str = request.form.get("message",default="")
-    id:str = clean_symbols(request.form.get("id",default="-b2bi0JgEhJru87HTcRjh9vdT"))
-    user:str = request.form.get("user",default="木子")
-    nickname:str = request.form.get("nickname",default="墨子")
-    multiuser:bool = request.form.get("multiuser",default=True)
-    state:str = request.form.get("state",default=None)
+    req_msg: str = request.form.get("message", default="")
+    id: str = clean_symbols(request.form.get("id", default="-b2bi0JgEhJru87HTcRjh9vdT"))
+    user: str = request.form.get("user", default="木子")
+    nickname: str = request.form.get("nickname", default="墨子")
+    multiuser: bool = request.form.get("multiuser", default=True)
+    state: str = request.form.get("state", default=None)
     # req_msg = req_msg if len(req_msg) <= 256 else req_msg[:256]
 
     echo = gen_echo()
@@ -59,15 +68,15 @@ def chat():
     return jsonify({"message": bak_msg, "state": "ok"})
 
 
-@app.route("/nickname", methods=["POST","GET"])
+@app.route("/nickname", methods=["POST", "GET"])
 def nickname():
     if request.method == "POST":
-        name:str = request.form.get("name",default="")
+        name: str = request.form.get("name", default="")
     elif request.method == "GET":
-        name:str = request.args.get("name",default="")
+        name: str = request.args.get("name", default="")
     else:
         return "fuck you!"
-    
+
     echo = gen_echo()
     prxxx()
     prxxx(f" #    GenNickname echo:{echo}")
@@ -81,11 +90,10 @@ def nickname():
     return jsonify({"nickname": nickname, "state": "ok"})
 
 
-
 @app.route("/cleanstate", methods=["GET"])
 def cleanstate():
     try:
-        id:str = request.args["id"]
+        id: str = request.args["id"]
         if not id in chaters:
             chaters[id] = RWKVChater(id)
         chaters[id].reset()
@@ -95,14 +103,20 @@ def cleanstate():
 NM
     """
 
+
 @app.route("/restart", methods=["GET"])
 def restart():
     if request.args["passwd_gkd"] == "ihAVEcODE":
-        python = sys.executable
-        prxxx("### Restart ! ###")
-        os.execl(python, python, *sys.argv)
-        os.exit()
+        restart()
     return jsonify({"state": "fuck you!"})
+
+
+@app.route("/stop", methods=["GET"])
+def restart():
+    if request.args["passwd_gkd"] == "ihAVEcODE":
+        stop()
+    return jsonify({"state": "fuck you!"})
+
 
 @app.route("/", methods=["GET"])
 def index():
@@ -120,17 +134,14 @@ def test():
     prxxx(f" #  {echo}-[{chaters['init'].chat(test_msg, chatuser = '测试者')}]<--")
 
 
-
-
-
 # 启动APP
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGINT, StopIteration)
     test()
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
     prxxx()
 
     prxxx("Web api server start!\a")
-    serve(app, host="0.0.0.0", port=8088,threads=8)
+    serve(app, host="0.0.0.0", port=8088, threads=8)
     # app.run(host="0.0.0.0", port=8088, debug=False)
