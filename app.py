@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import time, random, re
+import time, random, re, sys, os
 from flask import jsonify
 from waitress import serve
 from flask import Flask, request
@@ -11,14 +11,13 @@ import sys
 
 test_msg = """告诉我关于你的一切。"""
 
-
 with open("help.min.html", "r") as f:
     flask_help = f.read()
 
 random.seed(time.time())
 chaters: Dict[str,RWKVChater] = {}
 process_default_state()
-nicknameGener = RWKVNicknameGener()
+#nicknameGener = RWKVNicknameGener()
 
 def save_chaters_state():
     for id in chaters:
@@ -42,7 +41,7 @@ def chat():
     multiuser:bool = request.form.get("multiuser",default=True)
     state:str = request.form.get("state",default=None)
     # req_msg = req_msg if len(req_msg) <= 256 else req_msg[:256]
-    
+
     echo = gen_echo()
     prxxx()
     if not id in chaters:
@@ -96,6 +95,14 @@ def cleanstate():
 NM
     """
 
+@app.route("/restart", methods=["GET"])
+def restart():
+    if request.args["passwd_gkd"] == "ihAVEcODE":
+        python = sys.executable
+        prxxx("### Restart ! ###")
+        os.execl(python, python, *sys.argv)
+        os.exit()
+    return jsonify({"state": "fuck you!"})
 
 @app.route("/", methods=["GET"])
 def index():
