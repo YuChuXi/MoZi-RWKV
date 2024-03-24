@@ -24,27 +24,28 @@ MAX_GENERATION_LENGTH: int = 128
 # Sampling temperature. It could be a good idea to increase temperature when top_p is low.
 TEMPERATURE: float = 1.0
 # For better Q&A accuracy and less diversity, reduce top_p (to 0.5, 0.2, 0.1 etc.)
-TOP_P: float = 0.7
+TOP_P: float = 0.5
 # Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
-PRESENCE_PENALTY: float = 1.7
+PRESENCE_PENALTY: float = 0.7
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
-FREQUENCY_PENALTY: float = 2.1
+FREQUENCY_PENALTY: float = 1.0
 # When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.2 is a good idea.
-PRPEAT_PENALTY: float = 1.12
+PRPEAT_PENALTY: float = 1.05
 # a?
-PENALTY_MITIGATE: float = 1.05
+PENALTY_MITIGATE: float = 1.02
 
 # END_OF_LINE_TOKEN: int = 187
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
 END_OF_TEXT_TOKEN: int = 0
 
-THREADS: int = 4
+THREADS: int = 8
 
 np.random.seed(int(time.time() * 1e6 % 2**30))
 
 model_name = "RWKV-5-World-3B-Q4_0-v2l"
 model_name = "RWKV-5-Qun-1B5-Q4_0"
 model_name = "RWKV-5-World-1B5-Q5_1-v2"
+model_name = "RWKV-5-World-7B-Q5_1-v2"
 
 model_path = f"model/{model_name}.bin"
 

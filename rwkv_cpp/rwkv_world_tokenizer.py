@@ -126,9 +126,9 @@ def get_world_tokenizer_v20230424() -> Tuple[
 
 
 class RWKV_TOKENIZER():
-    table: list[list[list[bytes]]]
-    good: list[set[int]]
-    wlen: list[int]
+    table: List[List[List[bytes]]]
+    good: List[Set[int]]
+    wlen: List[int]
     def __init__(self, file_name):
         self.idx2token = {}
         sorted = [] # must be already sorted
@@ -160,9 +160,9 @@ class RWKV_TOKENIZER():
                 self.wlen[s0] = max(self.wlen[s0], len(s))
                 self.good[s0].add(s1)
 
-    def encodeBytes(self, src: bytes) -> list[int]:
+    def encodeBytes(self, src: bytes) -> List[int]:
         src_len: int = len(src)
-        tokens: list[int] = []
+        tokens: List[int] = []
         i: int = 0
         while i < src_len:
             s: bytes = src[i : i + 1]
