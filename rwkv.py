@@ -107,6 +107,7 @@ class RWKVEmbryo:
     def __del__(self):
         self.mlog.close()
         self.ulog.close()
+        prxxx(f"Del RWKV id: {self.id}")
 
     @log_call
     def load_state(
