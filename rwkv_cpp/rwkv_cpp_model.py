@@ -4,12 +4,12 @@ import multiprocessing
 
 # Pre-import PyTorch, if available.
 # This fixes "OSError: [WinError 127] The specified procedure could not be found".
-'''
+"""
 try:
     import torch
 except ModuleNotFoundError:
     pass
-'''
+"""
 
 # I'm sure this is not strictly correct, but let's keep this crutch for now.
 try:
@@ -19,10 +19,10 @@ except ModuleNotFoundError:
 
 from typing import TypeVar, Optional, Tuple, List
 
-'''
+"""
 # A value of this type is either a numpy's ndarray or a PyTorch's Tensor.
 NumpyArrayOrPyTorchTensor: TypeVar = TypeVar('NumpyArrayOrPyTorchTensor')
-'''
+"""
 
 
 class RWKVModel:
@@ -31,12 +31,12 @@ class RWKVModel:
     """
 
     def __init__(
-            self,
-            shared_library: rwkv_cpp_shared_library.RWKVSharedLibrary,
-            model_path: str,
-            thread_count: int = max(1, multiprocessing.cpu_count() // 2),
-            gpu_layer_count: int = 0,
-            **kwargs
+        self,
+        shared_library: rwkv_cpp_shared_library.RWKVSharedLibrary,
+        model_path: str,
+        thread_count: int = max(1, multiprocessing.cpu_count() // 2),
+        gpu_layer_count: int = 0,
+        **kwargs,
     ) -> None:
         """
         Loads the model and prepares it for inference.
@@ -55,22 +55,28 @@ class RWKVModel:
             See documentation of `gpu_offload_layers` for details about layer offloading.
         """
 
-        if 'gpu_layers_count' in kwargs:
-            gpu_layer_count = kwargs['gpu_layers_count']
+        if "gpu_layers_count" in kwargs:
+            gpu_layer_count = kwargs["gpu_layers_count"]
 
-        assert os.path.isfile(model_path), f'{model_path} is not a file'
-        assert thread_count > 0, 'Thread count must be > 0'
-        assert gpu_layer_count >= 0, 'GPU layer count must be >= 0'
+        assert os.path.isfile(model_path), f"{model_path} is not a file"
+        assert thread_count > 0, "Thread count must be > 0"
+        assert gpu_layer_count >= 0, "GPU layer count must be >= 0"
 
         self._library: rwkv_cpp_shared_library.RWKVSharedLibrary = shared_library
 
-        self._ctx: rwkv_cpp_shared_library.RWKVContext = self._library.rwkv_init_from_file(model_path, thread_count)
+        self._ctx: rwkv_cpp_shared_library.RWKVContext = (
+            self._library.rwkv_init_from_file(model_path, thread_count)
+        )
 
         if gpu_layer_count > 0:
             self.gpu_offload_layers(gpu_layer_count)
 
-        self._state_buffer_element_count: int = self._library.rwkv_get_state_buffer_element_count(self._ctx)
-        self._logits_buffer_element_count: int = self._library.rwkv_get_logits_buffer_element_count(self._ctx)
+        self._state_buffer_element_count: int = (
+            self._library.rwkv_get_state_buffer_element_count(self._ctx)
+        )
+        self._logits_buffer_element_count: int = (
+            self._library.rwkv_get_logits_buffer_element_count(self._ctx)
+        )
 
         self._valid: bool = True
 
@@ -90,7 +96,7 @@ class RWKVModel:
             Count of layers to offload onto the GPU, must be >= 0.
         """
 
-        assert layer_count >= 0, 'Layer count must be >= 0'
+        assert layer_count >= 0, "Layer count must be >= 0"
 
         return self._library.rwkv_gpu_offload_layers(self._ctx, layer_count)
 
@@ -107,11 +113,11 @@ class RWKVModel:
         return self._library.rwkv_get_n_layer(self._ctx)
 
     def eval(
-            self,
-            token: int,
-            state_in: Optional[np.ndarray],
-            state_out: Optional[np.ndarray] = None,
-            logits_out: Optional[np.ndarray] = None,
+        self,
+        token: int,
+        state_in: Optional[np.ndarray],
+        state_out: Optional[np.ndarray] = None,
+        logits_out: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Evaluates the model for a single token.
@@ -134,22 +140,28 @@ class RWKVModel:
             Logits vector of shape (n_vocab); state for the next step.
         """
 
-        assert self._valid, 'Model was freed'
+        assert self._valid, "Model was freed"
 
         if state_in is not None:
-            self._validate_tensor(state_in, 'state_in', self._state_buffer_element_count)
+            self._validate_tensor(
+                state_in, "state_in", self._state_buffer_element_count
+            )
 
             state_in_ptr = self._get_data_ptr(state_in)
         else:
             state_in_ptr = 0
 
         if state_out is not None:
-            self._validate_tensor(state_out, 'state_out', self._state_buffer_element_count)
+            self._validate_tensor(
+                state_out, "state_out", self._state_buffer_element_count
+            )
         else:
             state_out = self._zeros_float32(self._state_buffer_element_count)
 
         if logits_out is not None:
-            self._validate_tensor(logits_out, 'logits_out', self._logits_buffer_element_count)
+            self._validate_tensor(
+                logits_out, "logits_out", self._logits_buffer_element_count
+            )
         else:
             logits_out = self._zeros_float32(self._logits_buffer_element_count)
 
@@ -158,17 +170,17 @@ class RWKVModel:
             token,
             state_in_ptr,
             self._get_data_ptr(state_out),
-            self._get_data_ptr(logits_out)
+            self._get_data_ptr(logits_out),
         )
 
         return logits_out, state_out
-    
+
     def eval_sequence(
-            self,
-            tokens: List[int],
-            state_in: Optional[np.ndarray],
-            state_out: Optional[np.ndarray] = None,
-            logits_out: Optional[np.ndarray] = None,
+        self,
+        tokens: List[int],
+        state_in: Optional[np.ndarray],
+        state_out: Optional[np.ndarray] = None,
+        logits_out: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Evaluates the model for a sequence of tokens.
@@ -201,22 +213,28 @@ class RWKVModel:
             Logits vector of shape (n_vocab); state for the next step.
         """
 
-        assert self._valid, 'Model was freed'
+        assert self._valid, "Model was freed"
 
         if state_in is not None:
-            self._validate_tensor(state_in, 'state_in', self._state_buffer_element_count)
+            self._validate_tensor(
+                state_in, "state_in", self._state_buffer_element_count
+            )
 
             state_in_ptr = self._get_data_ptr(state_in)
         else:
             state_in_ptr = 0
 
         if state_out is not None:
-            self._validate_tensor(state_out, 'state_out', self._state_buffer_element_count)
+            self._validate_tensor(
+                state_out, "state_out", self._state_buffer_element_count
+            )
         else:
             state_out = self._zeros_float32(self._state_buffer_element_count)
 
         if logits_out is not None:
-            self._validate_tensor(logits_out, 'logits_out', self._logits_buffer_element_count)
+            self._validate_tensor(
+                logits_out, "logits_out", self._logits_buffer_element_count
+            )
         else:
             logits_out = self._zeros_float32(self._logits_buffer_element_count)
 
@@ -225,18 +243,18 @@ class RWKVModel:
             tokens,
             state_in_ptr,
             self._get_data_ptr(state_out),
-            self._get_data_ptr(logits_out)
+            self._get_data_ptr(logits_out),
         )
 
         return logits_out, state_out
 
     def eval_sequence_in_chunks(
-            self,
-            tokens: List[int],
-            state_in: Optional[np.ndarray],
-            state_out: Optional[np.ndarray] = None,
-            logits_out: Optional[np.ndarray] = None,
-            chunk_size: int = 16,
+        self,
+        tokens: List[int],
+        state_in: Optional[np.ndarray],
+        state_out: Optional[np.ndarray] = None,
+        logits_out: Optional[np.ndarray] = None,
+        chunk_size: int = 16,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Evaluates the model for a sequence of tokens using `eval_sequence`, splitting a potentially long sequence into fixed-length chunks.
@@ -267,22 +285,28 @@ class RWKVModel:
             Logits vector of shape (n_vocab); state for the next step.
         """
 
-        assert self._valid, 'Model was freed'
+        assert self._valid, "Model was freed"
 
         if state_in is not None:
-            self._validate_tensor(state_in, 'state_in', self._state_buffer_element_count)
+            self._validate_tensor(
+                state_in, "state_in", self._state_buffer_element_count
+            )
 
             state_in_ptr = self._get_data_ptr(state_in)
         else:
             state_in_ptr = 0
 
         if state_out is not None:
-            self._validate_tensor(state_out, 'state_out', self._state_buffer_element_count)
+            self._validate_tensor(
+                state_out, "state_out", self._state_buffer_element_count
+            )
         else:
             state_out = self._zeros_float32(self._state_buffer_element_count)
 
         if logits_out is not None:
-            self._validate_tensor(logits_out, 'logits_out', self._logits_buffer_element_count)
+            self._validate_tensor(
+                logits_out, "logits_out", self._logits_buffer_element_count
+            )
         else:
             logits_out = self._zeros_float32(self._logits_buffer_element_count)
 
@@ -292,7 +316,7 @@ class RWKVModel:
             chunk_size,
             state_in_ptr,
             self._get_data_ptr(state_out),
-            self._get_data_ptr(logits_out)
+            self._get_data_ptr(logits_out),
         )
 
         return logits_out, state_out
@@ -304,7 +328,7 @@ class RWKVModel:
         The object must not be used anymore after calling this method.
         """
 
-        assert self._valid, 'Already freed'
+        assert self._valid, "Already freed"
 
         self._valid = False
 
@@ -312,15 +336,17 @@ class RWKVModel:
 
     def __del__(self) -> None:
         # Free the context on GC in case user forgot to call free() explicitly.
-        if hasattr(self, '_valid') and self._valid:
+        if hasattr(self, "_valid") and self._valid:
             self.free()
 
     def _validate_tensor(self, tensor: np.ndarray, name: str, size: int) -> None:
         tensor: np.ndarray = tensor
-        assert tensor.dtype == np.float32, f'{name} is not of type float32'
-        assert tensor.shape == (size,), f'{name} has invalid shape {tensor.shape}, expected ({size})'
-        assert tensor.data.contiguous, f'{name} is not contiguous'
-            
+        assert tensor.dtype == np.float32, f"{name} is not of type float32"
+        assert tensor.shape == (
+            size,
+        ), f"{name} has invalid shape {tensor.shape}, expected ({size})"
+        assert tensor.data.contiguous, f"{name} is not contiguous"
+
     def _get_data_ptr(self, tensor: np.ndarray):
         return tensor.ctypes.data
 

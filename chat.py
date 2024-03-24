@@ -1,7 +1,7 @@
 import time
 import requests
 
-'''
+"""
 message = input("Seed: ")
 while True:
     print("A",message)
@@ -10,12 +10,32 @@ while True:
     print("B",message)
     bak = requests.post("http://localhost:8088/message",data = {"msg":message,"id":"-2","user":"B"})
     message = bak.json()["text"]
-    '''
+    """
 if input("reset?") == "y":
-    print(requests.post("http://localhost:8088/message",data = {"msg":"+reset","id":"-i6trfghji87tf","user":"玉子","state":"xiaci.default.state"}).json()["text"])
-print(requests.post("http://localhost:8088/message",data = {"msg":input("a:"),"id":"-i6trfghji87tf","user":"小桐","state":"default.state"}).json()["text"])
+    print(
+        requests.post(
+            "http://localhost:8088/message",
+            data={
+                "msg": "+reset",
+                "id": "-i6trfghji87tf",
+                "user": "玉子",
+                "state": "xiaci.default.state",
+            },
+        ).json()["text"]
+    )
+print(
+    requests.post(
+        "http://localhost:8088/message",
+        data={
+            "msg": input("a:"),
+            "id": "-i6trfghji87tf",
+            "user": "小桐",
+            "state": "default.state",
+        },
+    ).json()["text"]
+)
 
-p="""夏次依锭： 你好，墨子。
+p = """夏次依锭： 你好，墨子。
 
 墨子： 夏次依锭？你怎么来了啊？
 
@@ -253,10 +273,20 @@ W墨： 新来的？小心晚上的怪物！魔王城就在附近！
 
 夏次依锭： 不了吧，我好饿。"""
 
-#print(requests.post("http://localhost:8088/message",data = {"msg":p,"id":"-i6trfghji87tf","user":"夏次依锭"}).json()["text"])
+# print(requests.post("http://localhost:8088/message",data = {"msg":p,"id":"-i6trfghji87tf","user":"夏次依锭"}).json()["text"])
 
-#time.sleep(100)
+# time.sleep(100)
 while True:
-    print(requests.post("http://localhost:8088/message",data = {"msg":"+","id":"-i6trfghji87tf","user":"小桐","state":"default.state"}).json()["text"])
-    #print(requests.post("http://localhost:8088/message",data = {"msg":"+reset","id":"-1dfg","user":"玉子"}).json()["text"])
+    print(
+        requests.post(
+            "http://localhost:8088/message",
+            data={
+                "msg": "+",
+                "id": "-i6trfghji87tf",
+                "user": "小桐",
+                "state": "default.state",
+            },
+        ).json()["text"]
+    )
+    # print(requests.post("http://localhost:8088/message",data = {"msg":"+reset","id":"-1dfg","user":"玉子"}).json()["text"])
     time.sleep(1)

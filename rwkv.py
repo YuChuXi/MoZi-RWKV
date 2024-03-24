@@ -15,7 +15,7 @@ from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
 
 # from tokenizer_util import get_tokenizer
 from typing import List, Dict, Optional
-from app_util import prxxx, check_dir, check_file
+from app_util import prxxx, check_dir, check_file, log_call
 
 # ======================================== Script settings ========================================
 
@@ -28,9 +28,11 @@ TOP_P: float = 0.5
 # Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
 PRESENCE_PENALTY: float = 0.7
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
+
 FREQUENCY_PENALTY: float = 1.0
 # When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.2 is a good idea.
 PRPEAT_PENALTY: float = 1.05
+
 # a?
 PENALTY_MITIGATE: float = 1.02
 
@@ -40,10 +42,11 @@ END_OF_TEXT_TOKEN: int = 0
 
 THREADS: int = 8
 
+
 np.random.seed(int(time.time() * 1e6 % 2**30))
 
-model_name = "RWKV-5-World-3B-Q4_0-v2l"
 model_name = "RWKV-5-Qun-1B5-Q4_0"
+model_name = "RWKV-5-World-3B-Q5_0-v2"
 model_name = "RWKV-5-World-1B5-Q5_1-v2"
 model_name = "RWKV-5-World-7B-Q5_1-v2"
 
@@ -94,7 +97,9 @@ class RWKVEmbryo:
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
         self.repeat_penalty: float = PRPEAT_PENALTY
-        self.penalty_mitigate:float = PENALTY_MITIGATE
+        self.penalty_mitigate: float = PENALTY_MITIGATE
+        self.temperature: float = TEMPERATURE
+        self.top_p: float = TOP_P
 
         self.load_state(self.id, prompt)
 
@@ -102,6 +107,7 @@ class RWKVEmbryo:
         self.mlog.close()
         self.ulog.close()
 
+    @log_call
     def load_state(
         self, state_name: str, prompt: str = None, reprompt=False, q: bool = False
     ):
@@ -140,6 +146,7 @@ class RWKVEmbryo:
             self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
         self.mlog.flush()
 
+    @log_call
     def save_state(self, state_name: str, q: bool = False):
         prxxx(f"Save state: {state_name}", q=q)
         check_dir(f"data/{state_name}")
@@ -156,12 +163,23 @@ class RWKVEmbryo:
         self.mlog.flush()
         self.ulog.flush()
 
+    @log_call
     def reset(self, quiet: bool = False, q: bool = False):
         self.load_state(self.default_state, q=q)
         self.ulog.write(" : Reset")
         self.save_state(self.id, q=q)
 
+    @log_call
     def check_state(self):
+        return
+        logit = self.logits[self.logits >= 0]
+        prxxx("logits", logit[-128:])
+        prxxx("pedt", self.processed_tokens_counts)
+        pppp = list(
+            map(lambda x: self.repeat_penalty**x, self.processed_tokens_counts.values())
+        )
+        pppp.sort()
+        prxxx("pppp", pppp)
         return
         l = self.logits
         s = self.state
@@ -184,28 +202,31 @@ class RWKVEmbryo:
         # self.presence_penalty = s_var/72
         # self.frequency_penalty = s_var/36
 
+    @log_call
     def process_processed_tokens_counts(self, token: int):
-        self.processed_tokens += [token]
-        for token in self.processed_tokens_counts:
-            self.processed_tokens_counts[token] /= self.penalty_mitigate
-
+        self.processed_tokens.append(token)
         if token not in self.processed_tokens_counts:  # 词频统计
             self.processed_tokens_counts[token] = 1
         else:
             self.processed_tokens_counts[token] += 1
 
+        for token in self.processed_tokens_counts:
+            self.processed_tokens_counts[token] /= self.penalty_mitigate
+
+    @log_call
     def process_token_penalty(self):
+        self.logits[END_OF_TEXT_TOKEN] = -1e9
         for token in self.processed_tokens_counts:
             self.logits[token] -= (
+                # 传统惩罚
                 self.presence_penalty
                 + self.processed_tokens_counts[token] * self.frequency_penalty
-            ) # 传统惩罚
+                # 新惩罚
+                + self.repeat_penalty ** self.processed_tokens_counts[token]
+                - 1
+            )
 
-            self.logits[token] = min(
-                self.logits[token],
-                self.logits[token] / self.repeat_penalty ** self.processed_tokens_counts[token],
-            ) # 新惩罚
-
+    @log_call
     def process_tokens(
         self, tokens: List[int], new_line_logit_bias: float = 0.0
     ) -> None:
@@ -228,6 +249,7 @@ class RWKVEmbryo:
         # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
         self.mlog.write(tokenizer.decodeBytes(tokens))
 
+    @log_call
     def process_token(self, token: int, new_line_logit_bias: float = 0.0) -> None:
         with model_lock:
             self.logits, self.state = model.eval(
@@ -289,18 +311,16 @@ class RWKVChater(RWKVEmbryo):
         show_user_to_model: bool = False,
     ):
         self.ulog.write(f"{chatuser}: {msg}\n")
-        temperature: float = TEMPERATURE
-        top_p: float = TOP_P
 
         if "-temp=" in msg:
             temperature = float(msg.split("-temp=")[1].split(" ")[0])
             msg = msg.replace("-temp=" + f"{temperature:g}", "")
-            temperature = max(0.2, min(temperature, 5.0))
+            self.temperature = max(0.2, min(temperature, 5.0))
 
         if "-top_p=" in msg:
             top_p = float(msg.split("-top_p=")[1].split(" ")[0])
             msg = msg.replace("-top_p=" + f"{top_p:g}", "")
-            top_p = max(0.2, min(top_p, 5.0))
+            self.top_p = max(0.2, min(top_p, 5.0))
 
         if "+reset" in msg:
             self.reset()
@@ -323,13 +343,10 @@ class RWKVChater(RWKVEmbryo):
                 unit=" tok",
             ):
                 self.process_token_penalty()
-                token: int = sampling.sample_logits(self.logits, temperature, top_p)
-
-                if token == END_OF_TEXT_TOKEN:
-                    break
-                else:
-                    self.process_token(token)
-
+                token: int = sampling.sample_logits(
+                    self.logits, self.temperature, self.top_p
+                )
+                self.process_token(token)
                 answer += tokenizer.decodeBytes([token])
                 if b"\n\n" in answer:
                     break
@@ -347,18 +364,31 @@ class RWKVChater(RWKVEmbryo):
 # ======================================== Gener settings =========================================
 prompt = """注: 
 以下是一张用户名与昵称的对照表，昵称是用户名中最具有特色的部分, 长度在五个字以内. 
-表格的每行由两部分组成, 分别是 "用户名" 和 "昵称", 在每一行中, 两个部分以 ":" 分隔. 
 如果一个用户名没有对应的昵称则以 "None" 填充. 
 
-用户名:昵称
-玉子是个废物喵:玉子
-沐沐:沐沐
-咦我的名字呢？:没名字的人
-YuChuXi:None
-墨子不是猫:墨子
-不想加班的朋朋:朋朋
-只有鱼骨头吃的喵:鱼骨头喵
-猫猫博士凌枫:猫猫博士
+用户名: 玉子是个废物喵
+昵称: 玉子
+
+用户名: 沐沐
+昵称: 沐沐
+
+用户名: 咦我的名字呢？
+昵称: 没名字的人
+
+用户名: YuChuXi
+昵称: None
+
+用户名: 墨子不是猫
+昵称: 墨子
+
+用户名: 不想加班的朋朋
+昵称: 朋朋
+
+用户名: 只有鱼骨头吃的喵
+昵称: 鱼骨头喵
+
+用户名: 猫猫博士凌枫
+昵称: 猫猫博士
 
 """
 
@@ -369,12 +399,12 @@ class RWKVNicknameGener(RWKVEmbryo):
         super().__init__("-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", prompt)
 
     def gen_nickname(self, name):
-        self.ulog.write(f"{name}:")
+        self.ulog.write(f"用户名: {name}\n昵称: ")
         temperature: float = TEMPERATURE
         top_p: float = TOP_P
 
         with self.process_lock:
-            new = f"{name}:"
+            new = f"用户名: {name}\n昵称: "
             self.process_tokens(tokenizer.encode(new))
 
             answer: bytes = b""
@@ -393,7 +423,7 @@ class RWKVNicknameGener(RWKVEmbryo):
                     self.process_token(token)
 
                 answer += tokenizer.decodeBytes([token])
-                if b"\n" in answer:
+                if b"\n\n" in answer:
                     break
 
         answer = answer.decode("utf-8").strip()
