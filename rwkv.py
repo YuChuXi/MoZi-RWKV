@@ -79,10 +79,11 @@ else:
 
 # ======================================== Embryo settings ========================================
 
-state_cache: Dict[str,Dict[str,object]]= {}
+state_cache: Dict[str, Dict[str, object]] = {}
 
 # =================================================================================================
-        
+
+
 class RWKVEmbryo:
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
@@ -186,7 +187,10 @@ class RWKVEmbryo:
         prxxx("logits", logit[-128:])
         prxxx("pedt", self.processed_tokens_counts)
         pppp = list(
-            map(lambda x: self.repeat_penalty**x, self.processed_tokens_counts.values())
+            map(
+                lambda x: self.repeat_penalty**x,
+                self.processed_tokens_counts.values(),
+            )
         )
         pppp.sort()
         prxxx("pppp", pppp)
@@ -310,7 +314,30 @@ assert default_init_prompt != "", "Prompt must not be empty"
 
 
 # =================================================================================================
-class RWKVChater(RWKVEmbryo):
+class RWKVChaterEmbryo(RWKVEmbryo):
+    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+        super().__init__(id, state_name, prompt)
+
+    def gen_answer(self, end_of: str = "\n\n") -> str:
+        answer: bytes = b""
+        for i in tqdm.trange(
+            MAX_GENERATION_LENGTH,
+            desc="Processing future",
+            leave=False,
+            unit=" tok",
+        ):
+            self.process_token_penalty()
+            token: int = sampling.sample_logits(
+                self.logits, self.temperature, self.top_p
+            )
+            self.process_token(token)
+            answer += tokenizer.decodeBytes([token])
+            if b"\n\n" in answer:
+                break
+        return answer.encode("utf-8")
+
+
+class RWKVChater(RWKVChaterEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
 
@@ -345,22 +372,7 @@ class RWKVChater(RWKVEmbryo):
             if msg != "+":
                 new = f"{chatuser}{separator} {msg}\n\n{nickname}{separator}"
                 self.process_tokens(tokenizer.encode(new))
-
-            answer: bytes = b""
-            for i in tqdm.trange(
-                MAX_GENERATION_LENGTH,
-                desc="Processing future",
-                leave=False,
-                unit=" tok",
-            ):
-                self.process_token_penalty()
-                token: int = sampling.sample_logits(
-                    self.logits, self.temperature, self.top_p
-                )
-                self.process_token(token)
-                answer += tokenizer.decodeBytes([token])
-                if b"\n\n" in answer:
-                    break
+            answer = self.gen_answer(end_of="\n\n")
 
         answer = answer.decode("utf-8").strip()
         if not show_user_to_model:  # 把昵称和用户名换回去
@@ -370,6 +382,12 @@ class RWKVChater(RWKVEmbryo):
         self.ulog.write(f"{nickname}: {answer}\n")
         # self.save_state(self.id, q=True)
         return answer
+
+
+class RWKVMultiUserChater(RWKVChaterEmbryo):
+    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+        super().__init__(id, state_name, prompt)
+        self.message_cache: List[List[str]] = []
 
 
 # ======================================== Gener settings =========================================
@@ -426,7 +444,9 @@ class RWKVNicknameGener(RWKVEmbryo):
                 unit=" tok",
             ):
                 self.process_token_penalty()
-                token: int = sampling.sample_logits(self.logits, self.temperature, self.top_p)
+                token: int = sampling.sample_logits(
+                    self.logits, self.temperature, self.top_p
+                )
 
                 if token == END_OF_TEXT_TOKEN:
                     break
