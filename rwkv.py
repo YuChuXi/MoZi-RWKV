@@ -307,7 +307,7 @@ with open(prompt_config, "r", encoding="utf-8") as json_file:
         with open(default_init_prompt, "rb") as f:
             default_init_prompt = f.read().decode("utf-8")
 assert default_init_prompt != "", "Prompt must not be empty"
- 
+
 
 # =================================================================================================
 class RWKVChater(RWKVEmbryo):
