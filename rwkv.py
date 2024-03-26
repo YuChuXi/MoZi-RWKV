@@ -320,6 +320,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
 
     def gen_answer(self, end_of: str = "\n\n") -> str:
         answer: bytes = b""
+        end: bytes = end_of.encode("utf-8")
         for i in tqdm.trange(
             MAX_GENERATION_LENGTH,
             desc="Processing future",
@@ -332,9 +333,9 @@ class RWKVChaterEmbryo(RWKVEmbryo):
             )
             self.process_token(token)
             answer += tokenizer.decodeBytes([token])
-            if b"\n\n" in answer:
+            if end in answer:
                 break
-        return answer.encode("utf-8")
+        return answer.decode("utf-8").strip()
 
 
 class RWKVChater(RWKVChaterEmbryo):
@@ -343,40 +344,36 @@ class RWKVChater(RWKVChaterEmbryo):
 
     def chat(
         self,
-        msg: str,
+        message: str,
         chatuser: str = user,
         nickname: str = bot,
-        show_user_to_model: bool = False,
     ):
-        self.ulog.write(f"{chatuser}: {msg}\n")
+        self.ulog.write(f"{chatuser}: {message}\n")
 
-        if "-temp=" in msg:
-            temperature = float(msg.split("-temp=")[1].split(" ")[0])
-            msg = msg.replace("-temp=" + f"{temperature:g}", "")
+        if "-temp=" in message:
+            temperature = float(message.split("-temp=")[1].split(" ")[0])
+            message = message.replace("-temp=" + f"{temperature:g}", "")
             self.temperature = max(0.2, min(temperature, 5.0))
 
-        if "-top_p=" in msg:
-            top_p = float(msg.split("-top_p=")[1].split(" ")[0])
-            msg = msg.replace("-top_p=" + f"{top_p:g}", "")
+        if "-top_p=" in message:
+            top_p = float(message.split("-top_p=")[1].split(" ")[0])
+            message = message.replace("-top_p=" + f"{top_p:g}", "")
             self.top_p = max(0.2, min(top_p, 5.0))
 
-        if "+reset" in msg:
+        if "+reset" in message:
             self.reset()
             return " : Done"
 
-        if not show_user_to_model:  # 不向模型展示用户名
-            msg = msg.replace(chatuser, user)
-        msg = msg.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
+        message = message.replace(chatuser, user)
+        message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
 
         with self.process_lock:
-            if msg != "+":
-                new = f"{chatuser}{separator} {msg}\n\n{nickname}{separator}"
+            if message != "+":
+                new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
                 self.process_tokens(tokenizer.encode(new))
             answer = self.gen_answer(end_of="\n\n")
 
-        answer = answer.decode("utf-8").strip()
-        if not show_user_to_model:  # 把昵称和用户名换回去
-            answer = answer.replace(user, chatuser)
+        answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
 
         self.ulog.write(f"{nickname}: {answer}\n")
@@ -384,10 +381,30 @@ class RWKVChater(RWKVChaterEmbryo):
         return answer
 
 
-class RWKVMultiUserChater(RWKVChaterEmbryo):
+class RWKVGroupChater(RWKVChaterEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
         self.message_cache: List[List[str]] = []
+
+    def send_message(self, message: str, chatuser: str = user) -> None:
+        self.message_cache.append([chatuser, message])
+
+    def get_answer(
+        self,
+        nickname: str = bot,
+    ) -> str:
+        message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
+
+        with self.process_lock:
+            if message != "+":
+                new = self.gen_prompt(self.message_cache)
+                self.process_tokens(tokenizer.encode(new))
+            answer = self.gen_answer(end_of="\n\n")
+        answer = answer.replace(bot, nickname).strip()
+
+        self.ulog.write(f"{nickname}: {answer}\n")
+        # self.save_state(self.id, q=True)
+        return answer
 
 
 # ======================================== Gener settings =========================================
