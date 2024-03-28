@@ -318,6 +318,33 @@ class RWKVChaterEmbryo(RWKVEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
 
+    def gen_prompt(
+        self,
+        message_list: List[List[object]],
+        time_limit: float = 3600,
+        ctx_limit: int = 256,
+    ):
+        """
+        [
+            [[],[],float],
+        #    u  m  t
+        ]
+        """
+        now_time = time.time()
+        token_list = [tokenizer.encode(f"{m[0]}{separator} {m[1]}") for m in message_list if now_time - m[2] < time_limit]
+        token_list.append(tokenizer.encode(f"{bot}{separator} "))
+        # len_sep= len(tokenizer.encode(separator + " "))
+        end_of_message = tokenizer.encode("\n\n")
+        ctx_limit += len(end_of_message)
+        for i in range(len(token_list,0,-1)):
+            len_token = len(end_of_message) + len(token_list[i])
+            if len_token <= ctx_limit:
+                ctx_limit -= len_token
+            else:
+                break
+        return [t + end_of_message for t in token_list[i:]][:-len(end_of_message)]
+
+
     def gen_answer(self, end_of: str = "\n\n") -> str:
         answer: bytes = b""
         end: bytes = end_of.encode("utf-8")
@@ -384,10 +411,12 @@ class RWKVChater(RWKVChaterEmbryo):
 class RWKVGroupChater(RWKVChaterEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
-        self.message_cache: List[List[str]] = []
+        self.message_cache: List[List[object]] = []
 
     def send_message(self, message: str, chatuser: str = user) -> None:
-        self.message_cache.append([chatuser, message])
+        self.message_cache.append(
+            [chatuser, message, time.time()]
+        )
 
     def get_answer(
         self,
