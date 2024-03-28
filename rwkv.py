@@ -331,7 +331,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         ]
         """
         now_time = time.time()
-        tokens_list = [tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n") for m in message_list if now_time - m[2] < time_limit]
+        tokens_list = [tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n") for m in message_list if now_time - m[2] <= time_limit]
         tokens_list.append(tokenizer.encode(f"{bot}{separator} "))
         for i in range(len(tokens_list),0,-1):
             len_token = len(tokens_list[i-1])
@@ -518,7 +518,7 @@ def process_default_state():
 
 # '''
 print(tokenizer.decode(RWKVChaterEmbryo.gen_prompt(None,[
-    ["saefsgrgdr","jgjgjghjghghgjh",time.time()-601],
+    ["saefsgrgdr","jgjgjghjghghgjh",time.time()-600],
     ["hjhjvhvjhb","ftjhvjhjhjhjdsr",time.time()-1000],
     ["guiyutftfd","pohhnkftfgheshj",time.time()-1000],
     ["bnmvnbmcgf","dtrfttdtytyrrr3",time.time()-1000],
