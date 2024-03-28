@@ -61,11 +61,11 @@ tokenizer_dict = "rwkv_cpp/rwkv_vocab_v20230424.txt"
 
 library = rwkv_cpp_shared_library.load_rwkv_shared_library()
 prxxx(f"System info: {library.rwkv_get_system_info_string()}")
-
+'''
 prxxx(f"Loading RWKV model: {model_path}")
 model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=THREADS)
 model_lock = Lock()
-
+'''
 check_dir("data")
 if check_file(f"data/tokenizer.pkl"):
     prxxx(f"Loading tokenizer: data/tokenizer.pkl")
@@ -331,18 +331,18 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         ]
         """
         now_time = time.time()
-        token_list = [tokenizer.encode(f"{m[0]}{separator} {m[1]}") for m in message_list if now_time - m[2] < time_limit]
-        token_list.append(tokenizer.encode(f"{bot}{separator} "))
-        # len_sep= len(tokenizer.encode(separator + " "))
-        end_of_message = tokenizer.encode("\n\n")
-        ctx_limit += len(end_of_message)
-        for i in range(len(token_list,0,-1)):
-            len_token = len(end_of_message) + len(token_list[i])
+        tokens_list = [tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n") for m in message_list if now_time - m[2] < time_limit]
+        tokens_list.append(tokenizer.encode(f"{bot}{separator} "))
+        for i in range(len(tokens_list),0,-1):
+            len_token = len(tokens_list[i-1])
             if len_token <= ctx_limit:
                 ctx_limit -= len_token
             else:
                 break
-        return [t + end_of_message for t in token_list[i:]][:-len(end_of_message)]
+        prompt = []
+        for l in tokens_list[i:]:
+            prompt += l
+        return prompt
 
 
     def gen_answer(self, end_of: str = "\n\n") -> str:
@@ -515,3 +515,14 @@ def process_default_state():
         RWKVChater(
             id="chat-model", state_name=model_state_name, prompt=default_init_prompt
         )
+
+# '''
+print(tokenizer.decode(RWKVChaterEmbryo.gen_prompt(None,[
+    ["saefsgrgdr","jgjgjghjghghgjh",time.time()-601],
+    ["hjhjvhvjhb","ftjhvjhjhjhjdsr",time.time()-1000],
+    ["guiyutftfd","pohhnkftfgheshj",time.time()-1000],
+    ["bnmvnbmcgf","dtrfttdtytyrrr3",time.time()-1000],
+    ["uigyfyffrt","jkhfhhgttdhdrrr",time.time()],
+    
+],time_limit=3600)))
+# '''
