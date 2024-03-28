@@ -61,11 +61,11 @@ tokenizer_dict = "rwkv_cpp/rwkv_vocab_v20230424.txt"
 
 library = rwkv_cpp_shared_library.load_rwkv_shared_library()
 prxxx(f"System info: {library.rwkv_get_system_info_string()}")
-'''
+# '''
 prxxx(f"Loading RWKV model: {model_path}")
 model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=THREADS)
 model_lock = Lock()
-'''
+# '''
 check_dir("data")
 if check_file(f"data/tokenizer.pkl"):
     prxxx(f"Loading tokenizer: data/tokenizer.pkl")
