@@ -340,7 +340,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
             else:
                 break
         prompt = []
-        for l in tokens_list[i:]:
+        for l in tokens_list[i-1:]:
             prompt += l
         return prompt
 
@@ -516,13 +516,13 @@ def process_default_state():
             id="chat-model", state_name=model_state_name, prompt=default_init_prompt
         )
 
-# '''
+'''
 print(tokenizer.decode(RWKVChaterEmbryo.gen_prompt(None,[
-    ["saefsgrgdr","jgjgjghjghghgjh",time.time()-600],
-    ["hjhjvhvjhb","ftjhvjhjhjhjdsr",time.time()-1000],
-    ["guiyutftfd","pohhnkftfgheshj",time.time()-1000],
-    ["bnmvnbmcgf","dtrfttdtytyrrr3",time.time()-1000],
+    ["saefsgrgdr","jgjgjghjghghgjh",time.time()-3600],
+    ["hjhjvhvjhb","ftjhvjhjhjhjdsr",time.time()-2400],
+    ["guiyutftfd","pohhnkftfgheshj",time.time()-1200],
+    ["bnmvnbmcgf","dtrfttdtytyrrr3",time.time()],
     ["uigyfyffrt","jkhfhhgttdhdrrr",time.time()],
     
-],time_limit=3600)))
+],time_limit=3600,ctx_limit=1)))
 # '''
