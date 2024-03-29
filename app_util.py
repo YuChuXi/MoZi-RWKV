@@ -19,26 +19,6 @@ def prxxx(*args, q: bool = False, from_debug=False, **kwargs):
     )
 
 
-pattern = re.compile("[!@#$%^&*+[\]{};:/<>?\|`~]")
-
-
-def clean_symbols(s):
-    return re.sub(pattern, "", s)
-
-
-def gen_echo():
-    return "%4.x" % random.randint(0, 65535)
-
-
-def check_dir(path):
-    if not os.path.isdir(path):
-        os.makedirs(path)
-
-
-def check_file(path):
-    return os.path.isfile(path)
-
-
 def log_call(func):
     def nfunc(*args, **kwargs):
         prxxx(f"Call {func.__name__}", from_debug=True)
@@ -59,3 +39,31 @@ def run_in_async_thread(func):
         thread = asyncio.to_threads(func, *args, **kwargs)
         return await thread
     return nfunc
+
+symbols = "[!@#$%^&*+[\]{};:/<>?\|`~]"
+
+def clean_symbols(s):
+    return "".join([c for c in s if c not in symbols]) 
+
+
+def gen_echo():
+    return "%4.x" % random.randint(0, 65535)
+
+
+def check_dir(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)
+
+
+def check_file(path):
+    return os.path.isfile(path)
+
+
+@run_in_async_thread
+def check_dir_async(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)
+
+@run_in_async_thread
+def check_file_async(path):
+    return os.path.isfile(path)

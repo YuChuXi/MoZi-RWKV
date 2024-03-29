@@ -16,7 +16,7 @@ from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
 
 # from tokenizer_util import get_tokenizer
 from typing import List, Dict, Optional
-from app_util import prxxx, check_dir, check_file, log_call, use_async_lock
+from app_util import prxxx, check_dir, check_file, log_call, use_async_lock, check_dir_async,check_file_async
 
 # ======================================== Script settings ========================================
 
@@ -122,15 +122,15 @@ class RWKVEmbryo:
         self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
 
         if (prompt is not None) and (
-            reprompt or (not check_file(f"data/{self.default_state}/tokens.pkl"))
+            reprompt or (not await check_file_async(f"data/{self.default_state}/tokens.pkl"))
         ):
             prompt_tokens = tokenizer.encode(prompt)
             prxxx(f"Process prompt tokens, length: {len(prompt_tokens)} tok", q=q)
             ltime = time.time()
             await self.process_tokens(prompt_tokens)
             prxxx(f"Processed prompt tokens, used: {int(time.time()-ltime)} s", q=q)
-            self.save_state(self.id, q=q)
-            self.save_state(self.default_state, q=q)
+            await self.save_state(self.id, q=q)
+            await self.save_state(self.default_state, q=q)
             return
 
         state_names = [self.default_state, model_state_name]
@@ -143,7 +143,7 @@ class RWKVEmbryo:
                 prxxx(f"Load state from cache: {state_name}", q=q)
                 data = state_cache[state_name].copy()
             else:
-                if not check_file(f"data/{state_name}/tokens.pkl"):
+                if not await check_file_async(f"data/{state_name}/tokens.pkl"):
                     continue
                 prxxx(f"Load state: {state_name}", q=q)
                 with open(f"data/{state_name}/tokens.pkl", "rb") as f:
@@ -163,7 +163,7 @@ class RWKVEmbryo:
     @log_call
     async def save_state(self, state_name: str, q: bool = False):
         prxxx(f"Save state: {state_name}", q=q)
-        check_dir(f"data/{state_name}")
+        await check_dir_async(f"data/{state_name}")
         with open(f"data/{state_name}/tokens.pkl", "wb") as f:
             pickle.dump(
                 {
@@ -261,8 +261,8 @@ class RWKVEmbryo:
             self.logits, self.state = model.eval(
                     token, self.state, self.state, self.logits
                 )
-            self.process_processed_tokens_counts(token)
-            self.check_state()
+            await self.process_processed_tokens_counts(token)
+            await self.check_state()
         # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
         self.mlog.write(tokenizer.decodeBytes(tokens))
         return self.logits, self.state
@@ -275,9 +275,9 @@ class RWKVEmbryo:
                 token, self.state, self.state, self.logits
             )
 
-        self.process_processed_tokens_counts(token)
+        await self.process_processed_tokens_counts(token)
         # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
-        self.check_state()
+        await self.check_state()
         self.mlog.write(tokenizer.decodeBytes([token]))
         return self.logits, self.state
 
@@ -361,7 +361,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
             unit=" tok",
         ):
             await asyncio.sleep(0)
-            self.process_token_penalty()
+            await self.process_token_penalty()
             token: int = sampling.sample_logits(
                 self.logits, self.temperature, self.top_p
             )
