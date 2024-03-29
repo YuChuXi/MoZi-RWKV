@@ -1,4 +1,4 @@
-import time, re, random, os
+import time, re, random, os, sys
 from typing import Callable
 import asyncio
 
@@ -50,4 +50,12 @@ def use_async_lock(func):
     async def nfunc(*args, **kwargs):
         async with lock:
             return await func(*args, **kwargs)
+    return nfunc
+
+def run_in_async_thread(func):
+    if sys.version_info.micro < 9:
+        return func
+    async def nfunc(*args, **kwargs):
+        thread = asyncio.to_threads(func, *args, **kwargs)
+        return await thread
     return nfunc
