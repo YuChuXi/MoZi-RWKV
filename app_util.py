@@ -1,5 +1,6 @@
 import time, re, random, os
 from typing import Callable
+import asyncio
 
 def prxxx(*args, q: bool = False, from_debug=False, **kwargs):
     if q:
@@ -42,4 +43,11 @@ def log_call(func):
     def nfunc(*args, **kwargs):
         prxxx(f"Call {func.__name__}", from_debug=True)
         return func(*args, **kwargs)
+    return nfunc
+
+def use_async_lock(func):
+    lock = asyncio.locks.Lock()
+    async def nfunc(*args, **kwargs):
+        async with lock:
+            return await func(*args, **kwargs)
     return nfunc
