@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from socket import socket
 import time, random, re, sys, os, signal
-import uvicorn
+from quart import Quart, websocket
 import json
 import asyncio
 from rwkv import RWKVChater, RWKVNicknameGener, process_default_state
@@ -20,6 +20,9 @@ random.seed(time.time())
 chaters: Dict[str, RWKVChater] = {}
 nicknameGener = RWKVNicknameGener()
 
+
+
+app = Quart(__name__)
 
 async def save_chaters_state():
     for id in chaters:
@@ -115,27 +118,6 @@ async def test():
     )
 
 
-class RWKVWebSocketApp:
-    async def __call__(
-        self, scope, **kwargs
-    ) -> None:
-        prxxx(scope)
-        await (getattr(self,scope["type"])(scope, **kwargs))
-
-    async def http(self, scope, receive, send):
-        pass
-
-    async def websocket(self, scope, receive, send):
-
-
-class RWKVWebSocketServer(uvicorn.Server):
-    def __init__(self, config: uvicorn.Config) -> None:
-        super().__init__(config)
-
-    async def shutdown(self, sockets: List[socket] | None = None) -> None:
-        await save_chaters_state()
-        return await super().shutdown(sockets)
-
 
 async def main():
     await nicknameGener.init_state()
@@ -144,12 +126,8 @@ async def main():
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
     prxxx()
-    app = RWKVWebSocketApp()
-    config = uvicorn.Config(app, host=HOST, port=PORT, log_level="info", reload=True)
-    server = RWKVWebSocketServer(config)
-    server.force_exit
-    await server.serve()
+
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    app.run()
