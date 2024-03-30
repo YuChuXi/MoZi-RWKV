@@ -87,7 +87,7 @@ class RWKVState:
         self.processed_tokens_counts: Dict[int, int] = {}
 
     @run_in_async_thread
-    def save(self, stste_name: str) -> RWKVState:
+    def save(self, state_name: str):
         check_dir(f"data/{state_name}")
         with open(f"data/{state_name}/tokens.pkl", "wb") as f:
             pickle.dump(
@@ -102,7 +102,7 @@ class RWKVState:
         return self
 
     @run_in_async_thread
-    def load(self,stste_name: str) -> RWKVState:
+    def load(self,state_name: str):
         if not check_file(f"data/{state_name}/tokens.pkl"):
             return None
 
@@ -119,10 +119,10 @@ class RWKVState:
 
         return self
 
-    async def copy(self) -> RWKVState:
+    @run_in_async_thread
+    async def copy(self):
         new_state = RWKVState()
         for k in self.__dict__:
-            asyncio.sleep(0)
             new_state[k] = self.__dict__[k].copy()
         return new_state
 
@@ -132,13 +132,14 @@ state_cache: Dict[str, RWKVState] = {}
 # ============================================ Embryo =============================================
 
 class RWKVEmbryo:
-    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+    async def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
             f"Init RWKV id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt[:min(64,len(prompt)-1)]}"
         )
         check_dir(f"data/{id}")
 
         self.id: str = str(id)
+        self.prompt:str = prompt
         self.default_state: str = state_name
 
         self.state = RWKVState()
@@ -152,7 +153,7 @@ class RWKVEmbryo:
 
         self.mlog = open(f"data/{self.id}/model.log", "ab+")
         self.ulog = open(f"data/{self.id}/user.log", "a+", encoding="utf-8")
-        self.load_state(self.id, prompt)
+
 
     def __del__(self):
         self.mlog.close()
@@ -187,7 +188,7 @@ class RWKVEmbryo:
                 self.state = await state_cache[state_name].copy()
                 prxxx(f"Load state from cache: {state_name}", q=q)
             else:
-                if await self.state.load(stste_name) is None:
+                if await self.state.load(state_name) is None:
                     continue
                 if state_name != self.id:
                     state_cache[state_name] = self.state.copy()
@@ -202,10 +203,13 @@ class RWKVEmbryo:
 
     @use_async_lock
     @log_call
-    async def reset(self, quiet: bool = False, q: bool = False):
+    async def reset_state(self, quiet: bool = False, q: bool = False):
         await self.load_state(self.default_state, q=q)
         await self.save_state(self.id, q=q)
-        self.ulog.write(" : Reset")
+        self.ulog.write(" : Reset_state")
+
+    async def init_state(self):
+        self.load_state(self.id, self.prompt)
 
     @log_call
     async def check_state(self):
@@ -412,8 +416,8 @@ class RWKVChater(RWKVChaterEmbryo):
             message = message.replace("-top_p=" + f"{top_p:g}", "")
             self.top_p = max(0.2, min(top_p, 5.0))
 
-        if "+reset" in message:
-            self.reset()
+        if "+reset_state" in message:
+            self.reset_state()
             return " : Done"
 
         message = message.replace(chatuser, user)
@@ -507,17 +511,18 @@ class RWKVNicknameGener(RWKVEmbryo):
         await self.process_tokens(tokenizer.encode(new))
         answer = await self.gen_future(end_of="\n\n")
 
-        await self.reset(q=True)
+        await self.reset_state(q=True)
         return answer
 
 
-def process_default_state():
-    if check_file(f"data/{model_state_name}/tokens.pkl"):
+async def process_default_state():
+    if check_file_async(f"data/{model_state_name}/tokens.pkl"):
         prxxx("Default state was processed")
     else:
-        RWKVChater(
+        await (RWKVChater(
             id="chat-model", state_name=model_state_name, prompt=default_init_prompt
-        )
+        ).init_state())
+
 
 '''
 print(tokenizer.decode(RWKVChaterEmbryo.gen_prompt(None,[

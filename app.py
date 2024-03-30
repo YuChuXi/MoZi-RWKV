@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import time, random, re, sys, os, signal
-from flask import jsonify
-from waitress import serve
-from flask import Flask, request
+import uvicorn
+import json
+import asyncio
 from rwkv import RWKVChater, RWKVNicknameGener, process_default_state
 from app_util import prxxx, gen_echo, clean_symbols
 from typing import Dict
@@ -12,52 +12,48 @@ HOST, PORT = ("0.0.0.0", 8088)
 test_msg = """告诉我关于你的一切。"""
 
 with open("help.min.html", "r") as f:
-    flask_help = f.read()
+    help = f.read()
 
 random.seed(time.time())
 chaters: Dict[str, RWKVChater] = {}
 process_default_state()
+
 nicknameGener = RWKVNicknameGener()
 
-
-def save_chaters_state():
-    for id in chaters:
-        chaters[id].save_state(id)
-
-
 def restart():
-    save_chaters_state()
     python = sys.executable
     prxxx("### Restart ! ###")
     os.execl(python, python, *sys.argv)
 
 
 def stop(signal=None, frame=None):
-    save_chaters_state()
     prxxx("### STOP ! ###")
     sys.exit(0)
 
+async def save_chaters_state():
+    for id in chaters:
+        await chaters[id].save_state(id)
 
-app = Flask(__name__)
 
 
-@app.route("/chat", methods=["POST"])
-def R_chat():
-    req_msg: str = request.form.get("message", default="")
-    id: str = clean_symbols(request.form.get("id", default="-b2bi0JgEhJru87HTcRjh9vdT"))
-    user: str = request.form.get("user", default="木子")
-    nickname: str = request.form.get("nickname", default="墨子")
-    multiuser: bool = request.form.get("multiuser", default=True)
-    state: str = request.form.get("state", default=None)
+async def R_chat(kwargs:Dict[str,object]):
+    req_msg: str = kwargs.get("message", default="")
+    id: str = clean_symbols(kwargs.get("id", default="-b2bi0JgEhJru87HTcRjh9vdT"))
+    user: str = kwargs.get("user", default="木子")
+    nickname: str = kwargs.get("nickname", default="墨子")
+    multiuser: bool = kwargs.get("multiuser", default=True)
+    state: str = kwargs.get("state", default=None)
     # req_msg = req_msg if len(req_msg) <= 256 else req_msg[:256]
 
     echo = gen_echo()
     prxxx()
     if not id in chaters:
         chaters[id] = RWKVChater(id, state_name=state)
+        await chaters[id].init_state()
+
     prxxx(f" #    Chat id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -->[{req_msg}]-{echo}")
-    bak_msg = chaters[id].chat(
+    bak_msg = await chaters[id].chat(
         msg=req_msg, chatuser=user, nickname=nickname, show_user_to_model=multiuser
     )
     prxxx(f" #  {echo}-[{bak_msg}]<--")
@@ -65,91 +61,89 @@ def R_chat():
     # 如果接受到的内容为空，则给出相应的回复
     if bak_msg.isspace() or len(bak_msg) == 0:
         bak_msg = "喵喵喵？"
-    return jsonify({"message": bak_msg, "state": "ok"})
+    return json.dumps({"message": bak_msg, "state": "ok"})
 
 
-@app.route("/nickname", methods=["POST", "GET"])
-def R_nickname():
-    if request.method == "POST":
-        name: str = request.form.get("name", default="")
-    elif request.method == "GET":
-        name: str = request.args.get("name", default="")
-    else:
-        return "fuck you!"
 
+async def R_nickname(kwargs):
     echo = gen_echo()
+    name = kwargs["name"]
     prxxx()
     prxxx(f" #    GenNickname echo: {echo}")
     prxxx(f" #    -->[{name}]-{echo}")
-    nickname = nicknameGener.gen_nickname(name)
+    nickname = await nicknameGener.gen_nickname(name)
     prxxx(f" #  {echo}-[{nickname}]<--")
 
     # 如果接受到的内容为空，则给出相应的回复
     if nickname.isspace() or len(nickname) == 0 or nickname == "None":
         nickname = name
-    return jsonify({"nickname": nickname, "state": "ok"})
+    return json.dumps({"nickname": nickname, "state": "ok"})
 
 
-@app.route("/cleanstate", methods=["GET"])
-def R_cleanstate():
+async def R_cleanstate(kwargs):
     try:
-        id: str = request.args["id"]
+        id: str = kwargs.get("id")
         if not id in chaters:
             chaters[id] = RWKVChater(id)
-        chaters[id].reset()
-        return jsonify({"state": "ok"})
+            await chaters[id].init_state()
+        await chaters[id].reset()
+        return json.dumps({"state": "ok"})
     except:
         return """
 NM
     """
 
 
-@app.route("/restart", methods=["GET"])
-def R_restart():
-    if request.args["passwd_gkd"] == "ihAVEcODE":
+async def R_restart(kwargs):
+    if kwargs.get("passwd_gkd") == "ihAVEcODE":
+        await save_chaters_state()
         restart()
-    return jsonify({"state": "fuck you!"})
+    return json.dumps({"state": "fuck you!"})
 
 
-@app.route("/stop", methods=["GET"])
-def R_stop():
-    if request.args["passwd_gkd"] == "ihAVEcODE":
+async def R_stop(kwargs):
+    if kwargs.get("passwd_gkd") == "ihAVEcODE":
+        await save_chaters_state()
         stop()
-    return jsonify({"state": "fuck you!"})
+    return json.dumps({"state": "fuck you!"})
 
 
-@app.route("/", methods=["GET"])
-def R_index():
-    return flask_help
+
+async def R_index():
+    return help
 
 
-def test():
+async def test():
     chaters["init"] = RWKVChater("init")
+    await chaters["init"].init_state()
+
     prxxx(f"State size: {chaters['init'].state.size}")
     prxxx(f"State shape: {chaters['init'].state.shape}")
-    chaters["init"].reset()
+    await chaters["init"].reset()
     echo = gen_echo()
     prxxx(f" #    Test id: test | user: 测试者 | echo:{echo}")
     prxxx(f" #    -->[{test_msg}]-{echo}")
     prxxx(f" #  {echo}-[{chaters['init'].chat(test_msg, chatuser = '测试者')}]<--")
 
 
-# 启动APP
-if __name__ == "__main__":
+
+async def app(scope, receive, send):
+    raise Exception()
+
+async def main():
     signal.signal(signal.SIGINT, stop)
+    await nicknameGener.init_state()
     test()
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
     prxxx()
     prxxx("Web api server start!\a")
     prxxx(f"API HOST: {HOST} | PORT: {PORT}")
-    serve(app, host=HOST, port=PORT, threads=8)
-    # app.run(host="0.0.0.0", port=8088, debug=False)
+    config = uvicorn.Config(app, host = HOST, port=PORT, log_level="info", reload=True,ws=)
+    server = uvicorn.Server(config)
+    await server.serve()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 
-
-
-
-import websockets
-
-ws_server = websockets.server.WebSocketServer()
