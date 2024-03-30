@@ -1,5 +1,6 @@
-import time, re, random, os
+import time, re, random, os, sys
 from typing import Callable
+import asyncio
 
 def prxxx(*args, q: bool = False, from_debug=False, **kwargs):
     if q:
@@ -18,11 +19,31 @@ def prxxx(*args, q: bool = False, from_debug=False, **kwargs):
     )
 
 
-pattern = re.compile("[!@#$%^&*+[\]{};:/<>?\|`~]")
+def log_call(func):
+    def nfunc(*args, **kwargs):
+        prxxx(f"Call {func.__name__}", from_debug=True)
+        return func(*args, **kwargs)
+    return nfunc
 
+def use_async_lock(func):
+    lock = asyncio.locks.Lock()
+    async def nfunc(*args, **kwargs):
+        async with lock:
+            return await func(*args, **kwargs)
+    return nfunc
+
+def run_in_async_thread(func):
+    if sys.version_info.micro < 9:
+        return func
+    async def nfunc(*args, **kwargs):
+        thread = asyncio.to_threads(func, *args, **kwargs)
+        return await thread
+    return nfunc
+
+symbols = "[!@#$%^&*+[\]{};:/<>?\|`~]"
 
 def clean_symbols(s):
-    return re.sub(pattern, "", s)
+    return "".join([c for c in s if c not in symbols]) 
 
 
 def gen_echo():
@@ -38,8 +59,11 @@ def check_file(path):
     return os.path.isfile(path)
 
 
-def log_call(func):
-    def nfunc(*args, **kwargs):
-        prxxx(f"Call {func.__name__}", from_debug=True)
-        return func(*args, **kwargs)
-    return nfunc
+@run_in_async_thread
+def check_dir_async(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)
+
+@run_in_async_thread
+def check_file_async(path):
+    return os.path.isfile(path)

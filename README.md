@@ -1,0 +1,3 @@
+# MoZi-RWKV
+自己搓的 RWKV web API，基于[rwkv.cpp](https://github.com/RWKV/rwkv.cpp)  
+支持 聊天、昵称生成、多用户...
