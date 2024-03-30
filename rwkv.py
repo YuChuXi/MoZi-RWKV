@@ -16,7 +16,7 @@ from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
 
 # from tokenizer_util import get_tokenizer
 from typing import List, Dict, Optional
-from app_util import prxxx, check_dir, check_file, log_call, use_async_lock, check_dir_async,check_file_async
+from app_util import prxxx, check_dir, check_file, log_call, use_async_lock, check_dir_async, check_file_async, run_in_async_thread
 
 # ======================================== Script settings ========================================
 
@@ -76,28 +76,72 @@ else:
     with open(f"data/tokenizer.pkl", "wb") as f:
         pickle.dump(tokenizer, f)
 
-# ======================================== Embryo settings ========================================
+# ========================================= Embryo states =========================================
 
-state_cache: Dict[str, Dict[str, object]] = {}
 
-# =================================================================================================
+class RWKVState:
+    def __init__(self):
+        self.logits: np.ndarray = None
+        self.state: np.ndarray = None
+        self.processed_tokens: List[int] = []
+        self.processed_tokens_counts: Dict[int, int] = {}
 
+    @run_in_async_thread
+    def save(self, stste_name: str) -> RWKVState:
+        check_dir(f"data/{state_name}")
+        with open(f"data/{state_name}/tokens.pkl", "wb") as f:
+            pickle.dump(
+                {
+                    "processed_tokens": self.processed_tokens,
+                    "logits": self.logits,
+                    "processed_tokens_counts": self.processed_tokens_counts,
+                },
+                f,
+            )
+        np.save(f"data/{state_name}/state.npy", self.state)
+        return self
+
+    @run_in_async_thread
+    def load(self,stste_name: str) -> RWKVState:
+        if not check_file(f"data/{state_name}/tokens.pkl"):
+            return None
+
+        with open(f"data/{state_name}/tokens.pkl", "rb") as f:
+            data: Dict[str, object] = pickle.load(f)
+
+        self.processed_tokens: List[int] = data["processed_tokens"]
+        self.logits: np.ndarray = data["logits"]
+        self.processed_tokens_counts: Dict[int, int] = data[
+            "processed_tokens_counts"
+        ]
+        self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
+
+
+        return self
+
+    async def copy(self) -> RWKVState:
+        new_state = RWKVState()
+        for k in self.__dict__:
+            asyncio.sleep(0)
+            new_state[k] = self.__dict__[k].copy()
+        return new_state
+
+
+state_cache: Dict[str, RWKVState] = {}
+
+# ============================================ Embryo =============================================
 
 class RWKVEmbryo:
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
-            f"Init RWKV id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
+            f"Init RWKV id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt[:min(64,len(prompt)-1)]}"
         )
         check_dir(f"data/{id}")
 
         self.id: str = str(id)
         self.default_state: str = state_name
-        self.process_lock: Lock = Lock()
 
-        self.logits: np.ndarray = None
-        self.state: np.ndarray = None
-        self.processed_tokens: List[int] = []
-        self.processed_tokens_counts: Dict[int, int] = {}
+        self.state = RWKVState()
 
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
@@ -140,47 +184,28 @@ class RWKVEmbryo:
         for state_name in state_names:
             await asyncio.sleep(0)
             if (state_name != self.id) and (state_name in state_cache):
+                self.state = await state_cache[state_name].copy()
                 prxxx(f"Load state from cache: {state_name}", q=q)
-                data = state_cache[state_name].copy()
             else:
-                if not await check_file_async(f"data/{state_name}/tokens.pkl"):
+                if await self.state.load(stste_name) is None:
                     continue
-                prxxx(f"Load state: {state_name}", q=q)
-                with open(f"data/{state_name}/tokens.pkl", "rb") as f:
-                    data: Dict[str, object] = pickle.load(f)
                 if state_name != self.id:
-                    state_cache[state_name] = data.copy()
-
-            self.processed_tokens: List[int] = data["processed_tokens"]
-            self.logits: np.ndarray = data["logits"]
-            self.processed_tokens_counts: Dict[int, int] = data[
-                "processed_tokens_counts"
-            ]
-            self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
+                    state_cache[state_name] = self.state.copy()
+                prxxx(f"Load state: {state_name}", q=q)
             break
 
     @use_async_lock
     @log_call
     async def save_state(self, state_name: str, q: bool = False):
+        self.state.save(state_name)
         prxxx(f"Save state: {state_name}", q=q)
-        await check_dir_async(f"data/{state_name}")
-        with open(f"data/{state_name}/tokens.pkl", "wb") as f:
-            pickle.dump(
-                {
-                    "processed_tokens": self.processed_tokens,
-                    "logits": self.logits,
-                    "processed_tokens_counts": self.processed_tokens_counts,
-                },
-                f,
-            )
-        np.save(f"data/{state_name}/state.npy", self.state)
 
     @use_async_lock
     @log_call
     async def reset(self, quiet: bool = False, q: bool = False):
         await self.load_state(self.default_state, q=q)
-        self.ulog.write(" : Reset")
         await self.save_state(self.id, q=q)
+        self.ulog.write(" : Reset")
 
     @log_call
     async def check_state(self):
@@ -281,17 +306,8 @@ class RWKVEmbryo:
         self.mlog.write(tokenizer.decodeBytes([token]))
         return self.logits, self.state
 
-    """
-    # Model only saw '\n\n' as [187, 187] before, but the tokenizer outputs [535] for it at the end.
-    # See https://github.com/Blink/pulEmbryo:/110/files
-
-
-    def split_last_end_of_line(self, tokens: List[int]) -> List[int]:
-        if len(tokens) > 0 and tokens[-1] == DOUBLE_END_OF_LINE_TOKEN:
-            tokens = tokens[:-1] + [END_OF_LINE_TOKEN, END_OF_LINE_TOKEN]
-
-        return tokens
-    """
+    async def call(self, api:str, kwargs:Dict[str,object]):
+        return await (getattr(self,api)(**kwargs))
 
 
 # ========================================= Chat settings =========================================
@@ -339,19 +355,20 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         now_time = time.time()
         tokens_list = [tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n") for m in message_list if now_time - m[2] <= time_limit]
         tokens_list.append(tokenizer.encode(f"{bot}{separator} "))
-        for i in range(len(tokens_list),0,-1):
-            len_token = len(tokens_list[i-1])
+
+        prompt = []
+        for tl in tokens_list[::-1]:
+            len_token = len(tl)
             if len_token <= ctx_limit:
                 ctx_limit -= len_token
+                prompt = tl + prompt
             else:
                 break
-        prompt = []
-        for l in tokens_list[i-1:]:
-            prompt += l
+
         return prompt
 
     @use_async_lock
-    async def gen_answer(self, end_of: str = "\n\n") -> str:
+    async def gen_future(self, end_of: str = "\n\n") -> str:
         answer: bytes = b""
         end: bytes = end_of.encode("utf-8")
         for i in tqdm.trange(
@@ -361,7 +378,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
             unit=" tok",
         ):
             await asyncio.sleep(0)
-            await self.process_token_penalty()
+            logits, state = await self.process_token_penalty()
             token: int = sampling.sample_logits(
                 self.logits, self.temperature, self.top_p
             )
@@ -402,11 +419,10 @@ class RWKVChater(RWKVChaterEmbryo):
         message = message.replace(chatuser, user)
         message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
 
-        with self.process_lock:
-            if message != "+":
-                new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
-                await self.process_tokens(tokenizer.encode(new))
-            answer = await self.gen_answer(end_of="\n\n")
+        if message != "+":
+            new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
+            await self.process_tokens(tokenizer.encode(new))
+        answer = await self.gen_future(end_of="\n\n")
 
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
@@ -433,14 +449,13 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         nickname: str = bot,
     ) -> str:
         message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
+        if message != "+":
+            new = await self.gen_prompt(self.message_cache)
+            self.message_cache.clear()
+            await self.process_tokens(tokenizer.encode(new))
+        answer = await self.gen_future(end_of="\n\n")
 
-        with self.process_lock:
-            if message != "+":
-                new = await self.gen_prompt(self.message_cache)
-                await self.process_tokens(tokenizer.encode(new))
-            answer = await self.gen_answer(end_of="\n\n")
         answer = answer.replace(bot, nickname).strip()
-
         self.ulog.write(f"{nickname}: {answer}\n")
         # self.save_state(self.id, q=True)
         return answer
@@ -488,33 +503,10 @@ class RWKVNicknameGener(RWKVEmbryo):
     async   def gen_nickname(self, name):
         self.ulog.write(f"用户名: {name}\n称呼: ")
 
-        with self.process_lock:
-            new = f"用户名: {name}\n称呼: "
-            await self.process_tokens(tokenizer.encode(new))
+        new = f"用户名: {name}\n称呼: "
+        await self.process_tokens(tokenizer.encode(new))
+        answer = await self.gen_future(end_of="\n\n")
 
-            answer: bytes = b""
-            for i in tqdm.trange(
-                MAX_GENERATION_LENGTH,
-                desc="Processing future",
-                leave=False,
-                unit=" tok",
-            ):
-                await asyncio.sleep(0)
-                await self.process_token_penalty()
-                token: int = sampling.sample_logits(
-                    self.logits, self.temperature, self.top_p
-                )
-
-                if token == END_OF_TEXT_TOKEN:
-                    break
-                else:
-                    await self.process_token(token)
-
-                answer += tokenizer.decodeBytes([token])
-                if b"\n\n" in answer:
-                    break
-
-        answer = answer.decode("utf-8").strip()
         await self.reset(q=True)
         return answer
 
