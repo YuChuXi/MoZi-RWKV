@@ -36,7 +36,7 @@ def run_in_async_thread(func):
     if sys.version_info.micro < 9:
         return func
     async def nfunc(*args, **kwargs):
-        thread = asyncio.to_threads(func, *args, **kwargs)
+        thread = asyncio.to_thread(func, *args, **kwargs)
         return await thread
     return nfunc
 

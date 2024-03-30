@@ -132,9 +132,9 @@ state_cache: Dict[str, RWKVState] = {}
 # ============================================ Embryo =============================================
 
 class RWKVEmbryo:
-    async def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
-            f"Init RWKV id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt[:min(64,len(prompt)-1)]}"
+            f"Init RWKV id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
         )
         check_dir(f"data/{id}")
 
@@ -198,7 +198,7 @@ class RWKVEmbryo:
     @use_async_lock
     @log_call
     async def save_state(self, state_name: str, q: bool = False):
-        self.state.save(state_name)
+        await self.state.save(state_name)
         prxxx(f"Save state: {state_name}", q=q)
 
     @use_async_lock
@@ -209,18 +209,18 @@ class RWKVEmbryo:
         self.ulog.write(" : Reset_state")
 
     async def init_state(self):
-        self.load_state(self.id, self.prompt)
+        await self.load_state(self.id, self.prompt)
 
     @log_call
     async def check_state(self):
         return
         logit = self.logits[self.logits >= 0]
         prxxx("logits", logit[-128:])
-        prxxx("pedt", self.processed_tokens_counts)
+        prxxx("pedt", self.state.processed_tokens_counts)
         pppp = list(
             map(
                 lambda x: self.repeat_penalty**x,
-                self.processed_tokens_counts.values(),
+                self.state.processed_tokens_counts.values(),
             )
         )
         pppp.sort()
@@ -249,37 +249,37 @@ class RWKVEmbryo:
 
     @log_call
     async def process_processed_tokens_counts(self, token: int):
-        self.processed_tokens.append(token)
-        if token not in self.processed_tokens_counts:  # 词频统计
-            self.processed_tokens_counts[token] = 1
+        self.state.processed_tokens.append(token)
+        if token not in self.state.processed_tokens_counts:  # 词频统计
+            self.state.processed_tokens_counts[token] = 1
         else:
-            self.processed_tokens_counts[token] += 1
+            self.state.processed_tokens_counts[token] += 1
 
-        for token in self.processed_tokens_counts:
-            self.processed_tokens_counts[token] /= self.penalty_mitigate
+        for token in self.state.processed_tokens_counts:
+            self.state.processed_tokens_counts[token] /= self.penalty_mitigate
 
     @log_call
-    async def process_token_penalty(self):
-        self.logits[END_OF_TEXT_TOKEN] = -1e9
-        for token in self.processed_tokens_counts:
-            self.logits[token] -= (
+    async def process_token_penalty(self,logits:np.ndarray) -> np.ndarray:
+        logits[END_OF_TEXT_TOKEN] = -1e9
+        for token in self.state.processed_tokens_counts:
+            logits[token] -= (
                 # 传统惩罚
                 self.presence_penalty
-                + self.processed_tokens_counts[token] * self.frequency_penalty
+                + self.state.processed_tokens_counts[token] * self.frequency_penalty
                 # 新惩罚
-                + self.repeat_penalty ** self.processed_tokens_counts[token]
+                + self.repeat_penalty ** self.state.processed_tokens_counts[token]
                 - 1
             )
 
     @use_async_lock
     @log_call
     async def process_tokens(
-        self, tokens: List[int], new_line_logit_bias: float = 0.0
-    ) -> None:
+        self, tokens: List[int]
+    ):
         """
         self.logits, self.state = model.eval_sequence(
             tokens, self.state, self.state, self.logits, use_numpy=True)
-        self.processed_tokens += tokens
+        self.state.processed_tokens += tokens
         #self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
         """
 
@@ -287,28 +287,28 @@ class RWKVEmbryo:
             tokens, desc="Processing prompt", leave=False, unit=" tok"
         ): 
             await asyncio.sleep(0)
-            self.logits, self.state = model.eval(
-                    token, self.state, self.state, self.logits
+            self.state.logits, self.state.state = model.eval(
+                    token, self.state.state, self.state.state, self.state.logits
                 )
             await self.process_processed_tokens_counts(token)
             await self.check_state()
         # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
         self.mlog.write(tokenizer.decodeBytes(tokens))
-        return self.logits, self.state
+        return self.state.logits, self.state.state
 
     @use_async_lock
     @log_call
-    async def process_token(self, token: int, new_line_logit_bias: float = 0.0) -> None:
+    async def process_token(self, token: int):
         await asyncio.sleep(0)
-        self.logits, self.state = model.eval(
-                token, self.state, self.state, self.logits
+        self.state.logits, self.state.state = model.eval(
+                token, self.state.state, self.state.state, self.state.logits
             )
 
         await self.process_processed_tokens_counts(token)
         # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
         await self.check_state()
         self.mlog.write(tokenizer.decodeBytes([token]))
-        return self.logits, self.state
+        return self.state.logits, self.state.state
 
     async def call(self, api:str, kwargs:Dict[str,object]):
         return await (getattr(self,api)(**kwargs))
@@ -382,9 +382,10 @@ class RWKVChaterEmbryo(RWKVEmbryo):
             unit=" tok",
         ):
             await asyncio.sleep(0)
-            logits, state = await self.process_token_penalty()
+            logits = self.state.logits
+            await self.process_token_penalty(logits)
             token: int = sampling.sample_logits(
-                self.logits, self.temperature, self.top_p
+                logits, self.temperature, self.top_p
             )
             await self.process_token(token)
             answer += tokenizer.decodeBytes([token])
@@ -504,7 +505,7 @@ class RWKVNicknameGener(RWKVEmbryo):
         self.temperature: float = TEMPERATURE
         self.top_p: float = TOP_P
 
-    async   def gen_nickname(self, name):
+    async def gen_nickname(self, name):
         self.ulog.write(f"用户名: {name}\n称呼: ")
 
         new = f"用户名: {name}\n称呼: "
@@ -516,7 +517,7 @@ class RWKVNicknameGener(RWKVEmbryo):
 
 
 async def process_default_state():
-    if check_file_async(f"data/{model_state_name}/tokens.pkl"):
+    if await check_file_async(f"data/{model_state_name}/tokens.pkl"):
         prxxx("Default state was processed")
     else:
         await (RWKVChater(

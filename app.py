@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
+from socket import socket
 import time, random, re, sys, os, signal
 import uvicorn
 import json
 import asyncio
 from rwkv import RWKVChater, RWKVNicknameGener, process_default_state
 from app_util import prxxx, gen_echo, clean_symbols
-from typing import Dict
+from typing import Dict, List
 
 HOST, PORT = ("0.0.0.0", 8088)
 
@@ -15,28 +16,17 @@ with open("help.min.html", "r") as f:
     help = f.read()
 
 random.seed(time.time())
-chaters: Dict[str, RWKVChater] = {}
-process_default_state()
 
+chaters: Dict[str, RWKVChater] = {}
 nicknameGener = RWKVNicknameGener()
 
-def restart():
-    python = sys.executable
-    prxxx("### Restart ! ###")
-    os.execl(python, python, *sys.argv)
-
-
-def stop(signal=None, frame=None):
-    prxxx("### STOP ! ###")
-    sys.exit(0)
 
 async def save_chaters_state():
     for id in chaters:
-        await chaters[id].save_state(id)
+        await chaters[id].save_state(id, q=False)
 
 
-
-async def R_chat(kwargs:Dict[str,object]):
+async def R_chat(kwargs: Dict[str, object]):
     req_msg: str = kwargs.get("message", default="")
     id: str = clean_symbols(kwargs.get("id", default="-b2bi0JgEhJru87HTcRjh9vdT"))
     user: str = kwargs.get("user", default="木子")
@@ -64,7 +54,6 @@ async def R_chat(kwargs:Dict[str,object]):
     return json.dumps({"message": bak_msg, "state": "ok"})
 
 
-
 async def R_nickname(kwargs):
     echo = gen_echo()
     name = kwargs["name"]
@@ -86,7 +75,7 @@ async def R_cleanstate(kwargs):
         if not id in chaters:
             chaters[id] = RWKVChater(id)
             await chaters[id].init_state()
-        await chaters[id].reset()
+        await chaters[id].reset_state()
         return json.dumps({"state": "ok"})
     except:
         return """
@@ -97,16 +86,15 @@ NM
 async def R_restart(kwargs):
     if kwargs.get("passwd_gkd") == "ihAVEcODE":
         await save_chaters_state()
-        restart()
+
     return json.dumps({"state": "fuck you!"})
 
 
 async def R_stop(kwargs):
     if kwargs.get("passwd_gkd") == "ihAVEcODE":
         await save_chaters_state()
-        stop()
-    return json.dumps({"state": "fuck you!"})
 
+    return json.dumps({"state": "fuck you!"})
 
 
 async def R_index():
@@ -117,33 +105,51 @@ async def test():
     chaters["init"] = RWKVChater("init")
     await chaters["init"].init_state()
 
-    prxxx(f"State size: {chaters['init'].state.size}")
-    prxxx(f"State shape: {chaters['init'].state.shape}")
-    await chaters["init"].reset()
+    prxxx(f"State size: {chaters['init'].state.state.size}")
+    await chaters["init"].reset_state()
     echo = gen_echo()
     prxxx(f" #    Test id: test | user: 测试者 | echo:{echo}")
     prxxx(f" #    -->[{test_msg}]-{echo}")
-    prxxx(f" #  {echo}-[{chaters['init'].chat(test_msg, chatuser = '测试者')}]<--")
+    prxxx(
+        f" #  {echo}-[{await (chaters['init'].chat(test_msg, chatuser = '测试者'))}]<--"
+    )
 
 
+class RWKVWebSocketApp:
+    async def __call__(
+        self, scope, **kwargs
+    ) -> None:
+        prxxx(scope)
+        await (getattr(self,scope["type"])(scope, **kwargs))
 
-async def app(scope, receive, send):
-    raise Exception()
+    async def http(self, scope, receive, send):
+        pass
+
+    async def websocket(self, scope, receive, send):
+
+
+class RWKVWebSocketServer(uvicorn.Server):
+    def __init__(self, config: uvicorn.Config) -> None:
+        super().__init__(config)
+
+    async def shutdown(self, sockets: List[socket] | None = None) -> None:
+        await save_chaters_state()
+        return await super().shutdown(sockets)
+
 
 async def main():
-    signal.signal(signal.SIGINT, stop)
     await nicknameGener.init_state()
-    test()
+    await process_default_state()
+    await test()
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
     prxxx()
-    prxxx("Web api server start!\a")
-    prxxx(f"API HOST: {HOST} | PORT: {PORT}")
-    config = uvicorn.Config(app, host = HOST, port=PORT, log_level="info", reload=True,ws=)
-    server = uvicorn.Server(config)
+    app = RWKVWebSocketApp()
+    config = uvicorn.Config(app, host=HOST, port=PORT, log_level="info", reload=True)
+    server = RWKVWebSocketServer(config)
+    server.force_exit
     await server.serve()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
