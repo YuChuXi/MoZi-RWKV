@@ -306,7 +306,7 @@ async def after_serving():
     await save_chaters_state()
     global chaters, group_chaters
     del chaters, group_chaters
-    prxxx("Bye!")
+    prxxx("### STOP ! ###")
 
 
 async def main():
