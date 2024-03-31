@@ -86,6 +86,8 @@ class RWKVState:
         self.processed_tokens: List[int] = []
         self.processed_tokens_counts: Dict[int, int] = {}
 
+        self.data = ["logits", "state", "processed_tokens", "processed_tokens_counts"]
+
     @run_in_async_thread
     def save(self, state_name: str):
         check_dir(f"data/{state_name}")
@@ -120,10 +122,10 @@ class RWKVState:
         return self
 
     @run_in_async_thread
-    async def copy(self):
+    def copy(self):
         new_state = RWKVState()
-        for k in self.__dict__:
-            new_state[k] = self.__dict__[k].copy()
+        for k in self.data:
+            new_state.__dict__[k] = self.__dict__[k].copy()
         return new_state
 
 
@@ -143,6 +145,7 @@ class RWKVEmbryo:
         self.default_state: str = state_name
 
         self.state = RWKVState()
+        self.need_save = False
 
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
@@ -158,6 +161,7 @@ class RWKVEmbryo:
     def __del__(self):
         self.mlog.close()
         self.ulog.close()
+        prxxx("del",self.id)
 
     @use_async_lock
     @log_call
@@ -174,6 +178,7 @@ class RWKVEmbryo:
             ltime = time.time()
             await self.process_tokens(prompt_tokens)
             prxxx(f"Processed prompt tokens, used: {int(time.time()-ltime)} s", q=q)
+            self.need_save = True
             await self.save_state(self.id, q=q)
             await self.save_state(self.default_state, q=q)
             return
@@ -185,21 +190,24 @@ class RWKVEmbryo:
         for state_name in state_names:
             await asyncio.sleep(0)
             if (state_name != self.id) and (state_name in state_cache):
-                self.state = await state_cache[state_name].copy()
+                self.state = await (state_cache[state_name].copy())
                 prxxx(f"Load state from cache: {state_name}", q=q)
             else:
                 if await self.state.load(state_name) is None:
                     continue
                 if state_name != self.id:
-                    state_cache[state_name] = self.state.copy()
+                    state_cache[state_name] = await (self.state.copy())
+                    self.need_save = True
                 prxxx(f"Load state: {state_name}", q=q)
             break
 
     @use_async_lock
     @log_call
     async def save_state(self, state_name: str, q: bool = False):
-        await self.state.save(state_name)
-        prxxx(f"Save state: {state_name}", q=q)
+        if self.need_save:
+            await self.state.save(state_name)
+            prxxx(f"Save state: {state_name}", q=q)
+            self.need_save = False
 
     @use_async_lock
     @log_call
@@ -270,6 +278,7 @@ class RWKVEmbryo:
                 + self.repeat_penalty ** self.state.processed_tokens_counts[token]
                 - 1
             )
+        return logits
 
     @use_async_lock
     @log_call
@@ -291,8 +300,8 @@ class RWKVEmbryo:
                     token, self.state.state, self.state.state, self.state.logits
                 )
             await self.process_processed_tokens_counts(token)
+            self.need_save = True
             await self.check_state()
-        # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
         self.mlog.write(tokenizer.decodeBytes(tokens))
         return self.state.logits, self.state.state
 
@@ -305,7 +314,7 @@ class RWKVEmbryo:
             )
 
         await self.process_processed_tokens_counts(token)
-        # self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
+        self.need_save =True
         await self.check_state()
         self.mlog.write(tokenizer.decodeBytes([token]))
         return self.state.logits, self.state.state
@@ -383,7 +392,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         ):
             await asyncio.sleep(0)
             logits = self.state.logits
-            await self.process_token_penalty(logits)
+            logits = await self.process_token_penalty(logits)
             token: int = sampling.sample_logits(
                 logits, self.temperature, self.top_p
             )
@@ -417,8 +426,8 @@ class RWKVChater(RWKVChaterEmbryo):
             message = message.replace("-top_p=" + f"{top_p:g}", "")
             self.top_p = max(0.2, min(top_p, 5.0))
 
-        if "+reset_state" in message:
-            self.reset_state()
+        if "+reset" in message:
+            await self.reset_state()
             return " : Done"
 
         message = message.replace(chatuser, user)
@@ -453,11 +462,9 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         self,
         nickname: str = bot,
     ) -> str:
-        message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
-        if message != "+":
-            new = await self.gen_prompt(self.message_cache)
-            self.message_cache.clear()
-            await self.process_tokens(tokenizer.encode(new))
+        new = await self.gen_prompt(self.message_cache)
+        self.message_cache.clear()
+        await self.process_tokens(tokenizer.encode(new))
         answer = await self.gen_future(end_of="\n\n")
 
         answer = answer.replace(bot, nickname).strip()

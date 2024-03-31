@@ -1,65 +1,117 @@
 # -*- coding: utf-8 -*-
-from socket import socket
-import time, random, re, sys, os, signal
-from quart import Quart, websocket
-import json
+import time, random, re, sys, os, signal, json, tqdm
+from quart import Quart, websocket, request
+from hypercorn.config import Config
+from hypercorn.asyncio import serve
 import asyncio
-from rwkv import RWKVChater, RWKVNicknameGener, process_default_state
+from rwkv import RWKVChater, RWKVNicknameGener, RWKVGroupChater, process_default_state
 from app_util import prxxx, gen_echo, clean_symbols
-from typing import Dict, List
+from typing import Dict
 
 HOST, PORT = ("0.0.0.0", 8088)
+SAVE_TIME = 3600
 
-test_msg = """告诉我关于你的一切。"""
+test_message = """告诉我关于你的一切。"""
 
 with open("help.min.html", "r") as f:
-    help = f.read()
+    flask_help = f.read()
 
 random.seed(time.time())
-
 chaters: Dict[str, RWKVChater] = {}
+group_chaters: Dict[str, RWKVGroupChater] = {}
 nicknameGener = RWKVNicknameGener()
-
-
 
 app = Quart(__name__)
 
+
+def restart():
+    python = sys.executable
+    prxxx("### Restart ! ###")
+    os.execl(python, python, *sys.argv)
+
+
+def stop(signal=None, frame=None):
+    prxxx("### STOP ! ###")
+    sys.exit(0)
+
+
 async def save_chaters_state():
-    for id in chaters:
-        await chaters[id].save_state(id, q=False)
+    for id in tqdm.tqdm(chaters, desc="Save chater", leave=False, unit="chr"):
+        await chaters[id].save_state(id, q=True)
+    for id in tqdm.tqdm(group_chaters, desc="Save chater", leave=False, unit="chr"):
+        await group_chaters[id].save_state(id, q=True)
 
 
-async def R_chat(kwargs: Dict[str, object]):
-    req_msg: str = kwargs.get("message", default="")
-    id: str = clean_symbols(kwargs.get("id", default="-b2bi0JgEhJru87HTcRjh9vdT"))
-    user: str = kwargs.get("user", default="木子")
-    nickname: str = kwargs.get("nickname", default="墨子")
-    multiuser: bool = kwargs.get("multiuser", default=True)
-    state: str = kwargs.get("state", default=None)
-    # req_msg = req_msg if len(req_msg) <= 256 else req_msg[:256]
+async def time_to_save():
+    while True:
+        await asyncio.sleep(SAVE_TIME)
+        await save_chaters_state()
+
+
+async def chat(kwargs: Dict[str, object]):
+    message: str = kwargs.get("message", "")
+    id: str = clean_symbols(kwargs.get("id", "-b2bi0JgEhJru87HTcRjh9vdT"))
+    user: str = kwargs.get("user", "木子")
+    nickname: str = kwargs.get("nickname", "墨子")
+    state: str = kwargs.get("state", None)
+    # message = message if len(message) <= 256 else message[:256]
 
     echo = gen_echo()
     prxxx()
     if not id in chaters:
         chaters[id] = RWKVChater(id, state_name=state)
         await chaters[id].init_state()
-
     prxxx(f" #    Chat id: {id} | user: {user} | echo: {echo}")
-    prxxx(f" #    -->[{req_msg}]-{echo}")
-    bak_msg = await chaters[id].chat(
-        msg=req_msg, chatuser=user, nickname=nickname, show_user_to_model=multiuser
-    )
-    prxxx(f" #  {echo}-[{bak_msg}]<--")
+    prxxx(f" #    -->[{message}]-{echo}")
+    answer = await chaters[id].chat(message=message, chatuser=user, nickname=nickname)
+    prxxx(f" #  {echo}-[{answer}]<--")
 
     # 如果接受到的内容为空，则给出相应的回复
-    if bak_msg.isspace() or len(bak_msg) == 0:
-        bak_msg = "喵喵喵？"
-    return json.dumps({"message": bak_msg, "state": "ok"})
+    if answer.isspace() or len(answer) == 0:
+        answer = "喵喵喵？"
+    return answer
 
 
-async def R_nickname(kwargs):
+async def group_chat_send(kwargs: Dict[str, object]):
+    message: str = kwargs.get("message", "")
+    id: str = clean_symbols(kwargs.get("id", "-b2bi0JgEhJru87HTcRjh9vdT"))
+    user: str = kwargs.get("user", "木子")
+    nickname: str = kwargs.get("nickname", "墨子")
+    state: str = kwargs.get("state", None)
+
     echo = gen_echo()
-    name = kwargs["name"]
+    prxxx()
+    if not id in group_chaters:
+        group_chaters[id] = RWKVGroupChater(id, state_name=state)
+        await group_chaters[id].init_state()
+    prxxx(f" #    Chat id: {id} | user: {user} | echo: {echo}")
+    prxxx(f" #    -->[{message}]-{echo}")
+    await group_chaters[id].send_message(message=message, chatuser=user)
+
+
+async def group_chat_get(kwargs: Dict[str, object]):
+    id: str = clean_symbols(kwargs.get("id", "-b2bi0JgEhJru87HTcRjh9vdT"))
+    nickname: str = kwargs.get("nickname", "墨子")
+    state: str = kwargs.get("state", None)
+
+    echo = gen_echo()
+    prxxx()
+    if not id in group_chaters:
+        group_chaters[id] = RWKVGroupChater(id, state_name=state)
+        await group_chaters[id].init_state()
+    prxxx(f" #    Chat id: {id} | nickname: {nickname} | echo: {echo}")
+    answer = await group_chaters[id].get_answer(nickname=nickname)
+    prxxx(f" #  {echo}-[{answer}]<--")
+
+    # 如果接受到的内容为空，则给出相应的回复
+    if answer.isspace() or len(answer) == 0:
+        answer = "喵喵喵？"
+    return answer
+
+
+async def nickname(kwargs: Dict[str, object]):
+    echo = gen_echo()
+    name = kwargs.get("name", "")
     prxxx()
     prxxx(f" #    GenNickname echo: {echo}")
     prxxx(f" #    -->[{name}]-{echo}")
@@ -69,42 +121,153 @@ async def R_nickname(kwargs):
     # 如果接受到的内容为空，则给出相应的回复
     if nickname.isspace() or len(nickname) == 0 or nickname == "None":
         nickname = name
-    return json.dumps({"nickname": nickname, "state": "ok"})
+    return nickname
 
 
-async def R_cleanstate(kwargs):
+@app.route("/chat", methods=["POST", "GET"])
+async def R_chat():
+    if request.method == "GET":
+        kwargs = await request.args
+    elif request.method == "POST":
+        kwargs = await request.form
+    else:
+        return "fuck you!"
+    answer = await chat(kwargs)
+    return {"message": answer, "state": "ok"}
+
+
+@app.route("/group_chat_send", methods=["POST", "GET"])
+async def R_group_chat_send():
+    if request.method == "GET":
+        kwargs = await request.args
+    elif request.method == "POST":
+        kwargs = await request.form
+    else:
+        return "fuck you!"
+    answer = await group_chat_send(kwargs)
+    return {"state": "ok"}
+
+
+@app.route("/group_chat_get", methods=["POST", "GET"])
+async def R_group_chat_get():
+    if request.method == "GET":
+        kwargs = await request.args
+    elif request.method == "POST":
+        kwargs = await request.form
+    else:
+        return "fuck you!"
+    answer = await group_chat_get(kwargs)
+    return {"message": answer, "state": "ok"}
+
+
+@app.route("/nickname", methods=["POST", "GET"])
+async def R_nickname():
+    if request.method == "POST":
+        kwargs = await request.form
+    elif request.method == "GET":
+        kwargs = await request.args
+    else:
+        return "fuck you!"
+    nickname = await nickname(kwargs)
+    return {"nickname": nickname, "state": "ok"}
+
+
+@app.route("/reset_state", methods=["GET"])
+async def R_reset_state():
     try:
-        id: str = kwargs.get("id")
-        if not id in chaters:
-            chaters[id] = RWKVChater(id)
-            await chaters[id].init_state()
-        await chaters[id].reset_state()
-        return json.dumps({"state": "ok"})
+        id: str = await request.args["id"]
+        flag = False
+        if id in chaters:
+            await chaters[id].reset_state()
+            flag = True
+        if id in chaters:
+            await chaters[id].reset_state()
+            flag = True
+        return {"state": "ok" if flag else "a?"}
     except:
         return """
 NM
     """
 
 
-async def R_restart(kwargs):
-    if kwargs.get("passwd_gkd") == "ihAVEcODE":
+@app.route("/restart", methods=["GET"])
+async def R_restart():
+    if await request.args["passwd_gkd"] == "ihAVEcODE":
         await save_chaters_state()
+        restart()
+    return {"state": "fuck you!"}
 
-    return json.dumps({"state": "fuck you!"})
 
-
-async def R_stop(kwargs):
-    if kwargs.get("passwd_gkd") == "ihAVEcODE":
+@app.route("/stop", methods=["GET"])
+async def R_stop():
+    if await request.args["passwd_gkd"] == "ihAVEcODE":
         await save_chaters_state()
+        stop()
+    return {"state": "fuck you!"}
 
-    return json.dumps({"state": "fuck you!"})
 
-
+@app.route("/", methods=["GET"])
 async def R_index():
-    return help
+    return flask_help
 
 
-async def test():
+@app.websocket("/chat")
+async def W_chat():
+    while True:
+        data = json.loads(await websocket.receive())
+        """
+        data{
+            id
+            message
+            username
+            nickname*
+            default_state*
+            echo*
+        }
+        """
+        answer = await chat(data)
+        await websocket.send(
+            json.dumps({"message": answer, "state": "OK", "echo": data.get("echo", "")})
+        )
+
+
+@app.websocket("/group_chat")
+async def W_group_chat():
+    while True:
+        data = json.loads(await websocket.receive())
+        """
+        data{
+            action
+            id
+            message+
+            username+
+            nickname*
+            default_state*
+            echo*
+        }
+        """
+        if data["action"] == "send":
+            await group_chat_send(data)
+            await websocket.send(
+                json.dumps({"state": "OK", "echo": data.get("echo", "")})
+            )
+        elif data["action"] == "get":
+            answer = await group_chat_get(data)
+            await websocket.send(
+                json.dumps(
+                    {"message": answer, "state": "OK", "echo": data.get("echo", "")}
+                )
+            )
+        else:
+            await websocket.send(
+                json.dumps({"state": "A?", "echo": data.get("echo", "")})
+            )
+
+
+@app.before_serving
+async def before_serving():
+    app.add_background_task(time_to_save)
+    await process_default_state()
     chaters["init"] = RWKVChater("init")
     await chaters["init"].init_state()
 
@@ -112,22 +275,33 @@ async def test():
     await chaters["init"].reset_state()
     echo = gen_echo()
     prxxx(f" #    Test id: test | user: 测试者 | echo:{echo}")
-    prxxx(f" #    -->[{test_msg}]-{echo}")
+    prxxx(f" #    -->[{test_message}]-{echo}")
     prxxx(
-        f" #  {echo}-[{await (chaters['init'].chat(test_msg, chatuser = '测试者'))}]<--"
+        f" #  {echo}-[{await(chaters['init'].chat(test_message, chatuser = '测试者'))}]<--"
     )
-
-
-
-async def main():
-    await nicknameGener.init_state()
-    await process_default_state()
-    await test()
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
     prxxx()
+    prxxx("Web api server start!\a")
+    prxxx(f"API HOST: {HOST} | PORT: {PORT}")
 
+
+@app.after_serving
+async def after_serving():
+    await save_chaters_state()
+    global chaters, group_chaters
+    del chaters, group_chaters
+    prxxx("Bye!")
+
+
+async def main():
+    config = Config()
+    config.bind = ["0.0.0.0:8088"]
+    config.use_reloader = True
+    config.debug = True
+    config.loglevel = "debug"
+    await serve(app, config)
 
 
 if __name__ == "__main__":
-    app.run()
+    asyncio.run(main())
