@@ -46,7 +46,8 @@ async def save_chaters_state():
 
 async def time_to_save():
     while True:
-        await asyncio.sleep(SAVE_TIME)
+        for i in range(SAVE_TIME):
+            await asyncio.sleep(1)
         await save_chaters_state()
 
 
@@ -266,7 +267,7 @@ async def W_group_chat():
 
 @app.before_serving
 async def before_serving():
-    app.add_background_task(time_to_save)
+    #app.add_background_task(time_to_save)
     await process_default_state()
     chaters["init"] = RWKVChater("init")
     await chaters["init"].init_state()
