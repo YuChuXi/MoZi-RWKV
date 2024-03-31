@@ -461,9 +461,8 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         self,
         nickname: str = bot,
     ) -> str:
-        new = await self.gen_prompt(self.message_cache)
+        await self.process_tokens(await self.gen_prompt(self.message_cache))
         self.message_cache.clear()
-        await self.process_tokens(tokenizer.encode(new))
         answer = await self.gen_future(end_of="\n\n")
 
         answer = answer.replace(bot, nickname).strip()

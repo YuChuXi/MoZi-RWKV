@@ -37,11 +37,11 @@ def stop(signal=None, frame=None):
 
 async def save_chaters_state():
     for id in tqdm.tqdm(chaters, desc="Save chater", leave=False, unit="chr"):
-        await asyncio.sleep(0.1)
-        await chaters[id].save_state(id, q=True)
+        await asyncio.sleep(0)
+        await chaters[id].save_state(id, q=0)
     for id in tqdm.tqdm(group_chaters, desc="Save chater", leave=False, unit="chr"):
         await asyncio.sleep(0)
-        await group_chaters[id].save_state(id, q=True)
+        await group_chaters[id].save_state(id, q=0)
 
 
 async def time_to_save():
