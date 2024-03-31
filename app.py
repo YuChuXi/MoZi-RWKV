@@ -178,25 +178,21 @@ async def R_nickname():
 
 @app.route("/reset_state", methods=["GET"])
 async def R_reset_state():
-    try:
-        id: str = await request.args["id"]
-        flag = False
-        if id in chaters:
-            await chaters[id].reset_state()
-            flag = True
-        if id in group_chaters:
-            await group_chaters[id].reset_state()
-            flag = True
-        return {"state": "ok" if flag else "a?"}
-    except:
-        return """
-NM
-    """
+    id: str = (await request.args)["id"]
+    flag = False
+    if id in chaters:
+        await chaters[id].reset_state()
+        flag = True
+    if id in group_chaters:
+        await group_chaters[id].reset_state()
+        flag = True
+    return {"state": "ok" if flag else "a?"}
+
 
 
 @app.route("/restart", methods=["GET"])
 async def R_restart():
-    if await request.args["passwd_gkd"] == "ihAVEcODE":
+    if (await request.args)["passwd_gkd"] == "ihAVEcODE":
         await save_chaters_state()
         restart()
     return {"state": "fuck you!"}
@@ -204,7 +200,7 @@ async def R_restart():
 
 @app.route("/stop", methods=["GET"])
 async def R_stop():
-    if await request.args["passwd_gkd"] == "ihAVEcODE":
+    if (await request.args)["passwd_gkd"] == "ihAVEcODE":
         await save_chaters_state()
         stop()
     return {"state": "fuck you!"}
