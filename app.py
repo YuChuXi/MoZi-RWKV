@@ -46,7 +46,7 @@ async def save_chaters_state():
 
 async def time_to_save():
     while True:
-        for i in range(SAVE_TIME):
+        for i in range(SAVE_TIME): # 防止卡服务器关闭
             await asyncio.sleep(1)
         await save_chaters_state()
 
