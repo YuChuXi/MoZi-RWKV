@@ -184,8 +184,8 @@ async def R_reset_state():
         if id in chaters:
             await chaters[id].reset_state()
             flag = True
-        if id in chaters:
-            await chaters[id].reset_state()
+        if id in group_chaters:
+            await group_chaters[id].reset_state()
             flag = True
         return {"state": "ok" if flag else "a?"}
     except:
