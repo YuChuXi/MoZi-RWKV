@@ -16,7 +16,16 @@ from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
 
 # from tokenizer_util import get_tokenizer
 from typing import List, Dict, Optional
-from app_util import prxxx, check_dir, check_file, log_call, use_async_lock, check_dir_async, check_file_async, run_in_async_thread
+from app_util import (
+    prxxx,
+    check_dir,
+    check_file,
+    log_call,
+    use_async_lock,
+    check_dir_async,
+    check_file_async,
+    run_in_async_thread,
+)
 
 # ======================================== Script settings ========================================
 
@@ -104,7 +113,7 @@ class RWKVState:
         return self
 
     @run_in_async_thread
-    def load(self,state_name: str):
+    def load(self, state_name: str):
         if not check_file(f"data/{state_name}/tokens.pkl"):
             return None
 
@@ -113,11 +122,8 @@ class RWKVState:
 
         self.processed_tokens: List[int] = data["processed_tokens"]
         self.logits: np.ndarray = data["logits"]
-        self.processed_tokens_counts: Dict[int, int] = data[
-            "processed_tokens_counts"
-        ]
+        self.processed_tokens_counts: Dict[int, int] = data["processed_tokens_counts"]
         self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
-
 
         return self
 
@@ -133,6 +139,7 @@ state_cache: Dict[str, RWKVState] = {}
 
 # ============================================ Embryo =============================================
 
+
 class RWKVEmbryo:
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
@@ -141,7 +148,7 @@ class RWKVEmbryo:
         check_dir(f"data/{id}")
 
         self.id: str = str(id)
-        self.prompt:str = prompt
+        self.prompt: str = prompt
         self.default_state: str = state_name
 
         self.state = RWKVState()
@@ -157,7 +164,6 @@ class RWKVEmbryo:
         self.mlog = open(f"data/{self.id}/model.log", "ab+")
         self.ulog = open(f"data/{self.id}/user.log", "a+", encoding="utf-8")
 
-
     def __del__(self):
         self.mlog.close()
         self.ulog.close()
@@ -170,7 +176,8 @@ class RWKVEmbryo:
         self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
 
         if (prompt is not None) and (
-            reprompt or (not await check_file_async(f"data/{self.default_state}/tokens.pkl"))
+            reprompt
+            or (not await check_file_async(f"data/{self.default_state}/tokens.pkl"))
         ):
             prompt_tokens = tokenizer.encode(prompt)
             prxxx(f"Process prompt tokens   length: {len(prompt_tokens)} tok", q=q)
@@ -189,13 +196,13 @@ class RWKVEmbryo:
         for state_name in state_names:
             await asyncio.sleep(0)
             if (state_name != self.id) and (state_name in state_cache):
-                self.state = await (state_cache[state_name].copy())
+                self.state = await state_cache[state_name].copy()
                 prxxx(f"Load state from cache   name: {state_name}", q=q)
             else:
                 if await self.state.load(state_name) is None:
                     continue
                 if state_name != self.id:
-                    state_cache[state_name] = await (self.state.copy())
+                    state_cache[state_name] = await self.state.copy()
                     self.need_save = True
                 prxxx(f"Load state   name: {state_name}", q=q)
             break
@@ -266,7 +273,7 @@ class RWKVEmbryo:
             self.state.processed_tokens_counts[token] /= self.penalty_mitigate
 
     @log_call
-    async def process_token_penalty(self,logits:np.ndarray) -> np.ndarray:
+    async def process_token_penalty(self, logits: np.ndarray) -> np.ndarray:
         logits[END_OF_TEXT_TOKEN] = -1e9
         for token in self.state.processed_tokens_counts:
             logits[token] -= (
@@ -281,9 +288,7 @@ class RWKVEmbryo:
 
     @use_async_lock
     @log_call
-    async def process_tokens(
-        self, tokens: List[int]
-    ):
+    async def process_tokens(self, tokens: List[int]):
         """
         self.logits, self.state = model.eval_sequence(
             tokens, self.state, self.state, self.logits, use_numpy=True)
@@ -293,11 +298,11 @@ class RWKVEmbryo:
 
         for token in tqdm.tqdm(
             tokens, desc="Processing prompt", leave=False, unit=" tok"
-        ): 
+        ):
             await asyncio.sleep(0)
             self.state.logits, self.state.state = model.eval(
-                    token, self.state.state, self.state.state, self.state.logits
-                )
+                token, self.state.state, self.state.state, self.state.logits
+            )
             await self.process_processed_tokens_counts(token)
             self.need_save = True
             await self.check_state()
@@ -309,17 +314,17 @@ class RWKVEmbryo:
     async def process_token(self, token: int):
         await asyncio.sleep(0)
         self.state.logits, self.state.state = model.eval(
-                token, self.state.state, self.state.state, self.state.logits
-            )
+            token, self.state.state, self.state.state, self.state.logits
+        )
 
         await self.process_processed_tokens_counts(token)
-        self.need_save =True
+        self.need_save = True
         await self.check_state()
         self.mlog.write(tokenizer.decodeBytes([token]))
         return self.state.logits, self.state.state
 
-    async def call(self, api:str, kwargs:Dict[str,object]):
-        return await (getattr(self,api)(**kwargs))
+    async def call(self, api: str, kwargs: Dict[str, object]):
+        return await getattr(self, api)(**kwargs)
 
 
 # ========================================= Chat settings =========================================
@@ -365,7 +370,11 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         ]
         """
         now_time = time.time()
-        tokens_list = [tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n") for m in message_list if now_time - m[2] <= time_limit]
+        tokens_list = [
+            tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n")
+            for m in message_list
+            if now_time - m[2] <= time_limit
+        ]
         tokens_list.append(tokenizer.encode(f"{bot}{separator} "))
 
         prompt = []
@@ -392,9 +401,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
             await asyncio.sleep(0)
             logits = self.state.logits
             logits = await self.process_token_penalty(logits)
-            token: int = sampling.sample_logits(
-                logits, self.temperature, self.top_p
-            )
+            token: int = sampling.sample_logits(logits, self.temperature, self.top_p)
             await self.process_token(token)
             answer += tokenizer.decodeBytes([token])
             if end in answer:
@@ -452,9 +459,7 @@ class RWKVGroupChater(RWKVChaterEmbryo):
 
     @use_async_lock
     async def send_message(self, message: str, chatuser: str = user) -> None:
-        self.message_cache.append(
-            [chatuser, message, time.time()]
-        )
+        self.message_cache.append([chatuser, message, time.time()])
 
     @use_async_lock
     async def get_answer(
@@ -525,12 +530,12 @@ async def process_default_state():
     if await check_file_async(f"data/{model_state_name}/tokens.pkl"):
         prxxx("Default state was processed")
     else:
-        await (RWKVChater(
+        await RWKVChater(
             id="chat-model", state_name=model_state_name, prompt=default_init_prompt
-        ).init_state())
+        ).init_state()
 
 
-'''
+"""
 print(tokenizer.decode(RWKVChaterEmbryo.gen_prompt(None,[
     ["saefsgrgdr","jgjgjghjghghgjh",time.time()-3600],
     ["hjhjvhvjhb","ftjhvjhjhjhjdsr",time.time()-2400],
@@ -539,4 +544,4 @@ print(tokenizer.decode(RWKVChaterEmbryo.gen_prompt(None,[
     ["uigyfyffrt","jkhfhhgttdhdrrr",time.time()],
     
 ],time_limit=3600,ctx_limit=1)))
-# '''
+# """
