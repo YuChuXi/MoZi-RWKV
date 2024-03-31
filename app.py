@@ -73,11 +73,13 @@ async def chat(kwargs: Dict[str, object]):
 
 
 async def group_chat_send(kwargs: Dict[str, object]):
-    message: str = kwargs.get("message", "")
+    message: str = kwargs.get("message", "").strip()
     id: str = clean_symbols(kwargs.get("id", "-b2bi0JgEhJru87HTcRjh9vdT"))
     user: str = kwargs.get("user", "木子")
-    nickname: str = kwargs.get("nickname", "墨子")
     state: str = kwargs.get("state", None)
+
+    if len(message) == 0 :
+        return
 
     echo = gen_echo()
     prxxx()
