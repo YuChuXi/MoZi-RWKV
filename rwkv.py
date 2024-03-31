@@ -161,7 +161,6 @@ class RWKVEmbryo:
     def __del__(self):
         self.mlog.close()
         self.ulog.close()
-        prxxx("del",self.id)
 
     @use_async_lock
     @log_call
