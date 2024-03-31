@@ -62,16 +62,16 @@ tokenizer_dict = "rwkv_cpp/rwkv_vocab_v20230424.txt"
 library = rwkv_cpp_shared_library.load_rwkv_shared_library()
 prxxx(f"System info: {library.rwkv_get_system_info_string()}")
 # '''
-prxxx(f"Loading RWKV model: {model_path}")
+prxxx(f"Loading RWKV model   file: {model_path}")
 model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=THREADS)
 # '''
 check_dir("data")
 if check_file(f"data/tokenizer.pkl"):
-    prxxx(f"Loading tokenizer: data/tokenizer.pkl")
+    prxxx(f"Loading tokenizer   file: data/tokenizer.pkl")
     with open(f"data/tokenizer.pkl", "rb") as f:
         tokenizer: RWKV_TOKENIZER = pickle.load(f)
 else:
-    prxxx(f"Loading tokenizer: {tokenizer_dict}")
+    prxxx(f"Loading tokenizer   file: {tokenizer_dict}")
     tokenizer: RWKV_TOKENIZER = RWKV_TOKENIZER(tokenizer_dict)
     with open(f"data/tokenizer.pkl", "wb") as f:
         pickle.dump(tokenizer, f)
@@ -136,7 +136,7 @@ state_cache: Dict[str, RWKVState] = {}
 class RWKVEmbryo:
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         prxxx(
-            f"Init RWKV id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
+            f"Init RWKV   id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
         )
         check_dir(f"data/{id}")
 
@@ -173,10 +173,10 @@ class RWKVEmbryo:
             reprompt or (not await check_file_async(f"data/{self.default_state}/tokens.pkl"))
         ):
             prompt_tokens = tokenizer.encode(prompt)
-            prxxx(f"Process prompt tokens, length: {len(prompt_tokens)} tok", q=q)
+            prxxx(f"Process prompt tokens   length: {len(prompt_tokens)} tok", q=q)
             ltime = time.time()
             await self.process_tokens(prompt_tokens)
-            prxxx(f"Processed prompt tokens, used: {int(time.time()-ltime)} s", q=q)
+            prxxx(f"Processed prompt tokens   used: {int(time.time()-ltime)} s", q=q)
             self.need_save = True
             await self.save_state(self.id, q=q)
             await self.save_state(self.default_state, q=q)
@@ -190,14 +190,14 @@ class RWKVEmbryo:
             await asyncio.sleep(0)
             if (state_name != self.id) and (state_name in state_cache):
                 self.state = await (state_cache[state_name].copy())
-                prxxx(f"Load state from cache: {state_name}", q=q)
+                prxxx(f"Load state from cache   name: {state_name}", q=q)
             else:
                 if await self.state.load(state_name) is None:
                     continue
                 if state_name != self.id:
                     state_cache[state_name] = await (self.state.copy())
                     self.need_save = True
-                prxxx(f"Load state: {state_name}", q=q)
+                prxxx(f"Load state   name: {state_name}", q=q)
             break
 
     @use_async_lock
@@ -205,7 +205,7 @@ class RWKVEmbryo:
     async def save_state(self, state_name: str, q: bool = False):
         if self.need_save:
             await self.state.save(state_name)
-            prxxx(f"Save state: {state_name}", q=q)
+            prxxx(f"Save state   name: {state_name}", q=q)
             self.need_save = False
 
     @use_async_lock
@@ -332,7 +332,7 @@ prompt_type: str = "Chat-MoZi-N"
 
 
 prompt_config = f"prompt/{language}-{prompt_type}.json"
-prxxx(f"Loading RWKV prompt config: {prompt_config}")
+prxxx(f"Loading RWKV prompt   config: {prompt_config}")
 with open(prompt_config, "r", encoding="utf-8") as json_file:
     prompt_data = json.load(json_file)
     user, bot, separator, default_init_prompt = (

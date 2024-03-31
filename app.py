@@ -38,10 +38,10 @@ def stop(signal=None, frame=None):
 async def save_chaters_state():
     for id in tqdm.tqdm(chaters, desc="Save chater", leave=False, unit="chr"):
         await asyncio.sleep(0)
-        await chaters[id].save_state(id, q=False)
-    for id in tqdm.tqdm(group_chaters, desc="Save chater", leave=False, unit="chr"):
+        await chaters[id].save_state(id, q=True)
+    for id in tqdm.tqdm(group_chaters, desc="Save grpup chater", leave=False, unit="chr"):
         await asyncio.sleep(0)
-        await group_chaters[id].save_state(id, q=False)
+        await group_chaters[id].save_state(id, q=True)
 
 
 async def time_to_save():
@@ -64,9 +64,11 @@ async def chat(kwargs: Dict[str, object]):
     if not id in chaters:
         chaters[id] = RWKVChater(id, state_name=state)
         await chaters[id].init_state()
-    prxxx(f" #    Chat id: {id} | user: {user} | echo: {echo}")
+
+    prxxx(f" #    Chat   id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -->[{message}]-{echo}")
     answer = await chaters[id].chat(message=message, chatuser=user, nickname=nickname)
+    prxxx(f" #    Chat   id: {id} | nickname: {nickname} | echo: {echo}")
     prxxx(f" #  {echo}-[{answer}]<--")
 
     # 如果接受到的内容为空，则给出相应的回复
@@ -89,7 +91,8 @@ async def group_chat_send(kwargs: Dict[str, object]):
     if not id in group_chaters:
         group_chaters[id] = RWKVGroupChater(id, state_name=state)
         await group_chaters[id].init_state()
-    prxxx(f" #    Chat id: {id} | user: {user} | echo: {echo}")
+
+    prxxx(f" #    Send Gchat   id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -->[{message}]-{echo}")
     await group_chaters[id].send_message(message=message, chatuser=user)
 
@@ -104,8 +107,9 @@ async def group_chat_get(kwargs: Dict[str, object]):
     if not id in group_chaters:
         group_chaters[id] = RWKVGroupChater(id, state_name=state)
         await group_chaters[id].init_state()
-    prxxx(f" #    Chat id: {id} | nickname: {nickname} | echo: {echo}")
+    
     answer = await group_chaters[id].get_answer(nickname=nickname)
+    prxxx(f" #    Get gchat   id: {id} | nickname: {nickname} | echo: {echo}")
     prxxx(f" #  {echo}-[{answer}]<--")
 
     # 如果接受到的内容为空，则给出相应的回复
@@ -118,15 +122,27 @@ async def nickname(kwargs: Dict[str, object]):
     echo = gen_echo()
     name = kwargs.get("name", "")
     prxxx()
-    prxxx(f" #    GenNickname echo: {echo}")
+    prxxx(f" #    GenNickname   echo: {echo}")
     prxxx(f" #    -->[{name}]-{echo}")
     nickname = await nicknameGener.gen_nickname(name)
+    prxxx(f" #    GenNickname   echo: {echo}")
     prxxx(f" #  {echo}-[{nickname}]<--")
 
     # 如果接受到的内容为空，则给出相应的回复
     if nickname.isspace() or len(nickname) == 0 or nickname == "None":
         nickname = name
     return nickname
+
+async def reset_state(kwargs):
+    id = kwargs["id"]
+    flag = False
+    if id in chaters:
+        await chaters[id].reset_state()
+        flag = True
+    if id in group_chaters:
+        await group_chaters[id].reset_state()
+        flag = True
+    return flag
 
 
 @app.route("/chat", methods=["POST", "GET"])
@@ -179,14 +195,13 @@ async def R_nickname():
 
 @app.route("/reset_state", methods=["GET"])
 async def R_reset_state():
-    id: str = request.args["id"]
-    flag = False
-    if id in chaters:
-        await chaters[id].reset_state()
-        flag = True
-    if id in group_chaters:
-        await group_chaters[id].reset_state()
-        flag = True
+    if request.method == "GET":
+        kwargs = request.args
+    elif request.method == "POST":
+        kwargs = await request.form
+    else:
+        return "fuck you!"
+    flag = await reset_state(kwargs)
     return {"state": "ok" if flag else "a?"}
 
 
@@ -271,20 +286,19 @@ async def before_serving():
     await process_default_state()
     chaters["init"] = RWKVChater("init")
     await chaters["init"].init_state()
-
     prxxx(f"State size: {chaters['init'].state.state.size}")
     await chaters["init"].reset_state()
-    echo = gen_echo()
-    prxxx(f" #    Test id: test | user: 测试者 | echo:{echo}")
-    prxxx(f" #    -->[{test_message}]-{echo}")
-    prxxx(
-        f" #  {echo}-[{await(chaters['init'].chat(test_message, chatuser = '测试者'))}]<--"
-    )
+    await chat({
+        "id":"init",
+        "message":test_message,
+        "user":"测试者",
+    })
+
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
     prxxx()
     prxxx("Web api server start!\a")
-    prxxx(f"API HOST: {HOST} | PORT: {PORT}")
+    prxxx(f"API   HOST: {HOST} | PORT: {PORT}")
 
 
 @app.after_serving
