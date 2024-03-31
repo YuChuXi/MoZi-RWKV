@@ -131,7 +131,7 @@ async def nickname(kwargs: Dict[str, object]):
 @app.route("/chat", methods=["POST", "GET"])
 async def R_chat():
     if request.method == "GET":
-        kwargs = await request.args
+        kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
     else:
@@ -143,7 +143,7 @@ async def R_chat():
 @app.route("/group_chat_send", methods=["POST", "GET"])
 async def R_group_chat_send():
     if request.method == "GET":
-        kwargs = await request.args
+        kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
     else:
@@ -155,7 +155,7 @@ async def R_group_chat_send():
 @app.route("/group_chat_get", methods=["POST", "GET"])
 async def R_group_chat_get():
     if request.method == "GET":
-        kwargs = await request.args
+        kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
     else:
@@ -166,10 +166,10 @@ async def R_group_chat_get():
 
 @app.route("/nickname", methods=["POST", "GET"])
 async def R_nickname():
-    if request.method == "POST":
+    if request.method == "GET":
+        kwargs = request.args
+    elif request.method == "POST":
         kwargs = await request.form
-    elif request.method == "GET":
-        kwargs = await request.args
     else:
         return "fuck you!"
     nickname = await nickname(kwargs)
@@ -178,7 +178,7 @@ async def R_nickname():
 
 @app.route("/reset_state", methods=["GET"])
 async def R_reset_state():
-    id: str = (await request.args)["id"]
+    id: str = request.args["id"]
     flag = False
     if id in chaters:
         await chaters[id].reset_state()
@@ -192,7 +192,7 @@ async def R_reset_state():
 
 @app.route("/restart", methods=["GET"])
 async def R_restart():
-    if (await request.args)["passwd_gkd"] == "ihAVEcODE":
+    if request.args["passwd_gkd"] == "ihAVEcODE":
         await save_chaters_state()
         restart()
     return {"state": "fuck you!"}
@@ -200,7 +200,7 @@ async def R_restart():
 
 @app.route("/stop", methods=["GET"])
 async def R_stop():
-    if (await request.args)["passwd_gkd"] == "ihAVEcODE":
+    if request.args["passwd_gkd"] == "ihAVEcODE":
         await save_chaters_state()
         stop()
     return {"state": "fuck you!"}
