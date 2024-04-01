@@ -183,9 +183,8 @@ class RWKVEmbryo:
             ltime = time.time()
             await self.process_tokens(prompt_tokens)
             prxxx(f"Processed prompt tokens   used: {int(time.time()-ltime)} s", q=q)
-            self.need_save = True
-            await self.save_state(self.id, q=q)
-            await self.save_state(self.default_state, q=q)
+            await self.save_state(self.id, shuld=True, q=q)
+            await self.save_state(self.default_state, Shuld=True, q=q)
             return
 
         state_names = [self.default_state, model_state_name]
@@ -207,8 +206,8 @@ class RWKVEmbryo:
             break
 
     @log_call
-    async def save_state(self, state_name: str, q: bool = False):
-        if self.need_save:
+    async def save_state(self, state_name: str, shuld: bool = False, q: bool = False):
+        if self.need_save or shuld:
             await self.state.save(state_name)
             prxxx(f"Save state   name: {state_name}", q=q)
             self.need_save = False
@@ -397,7 +396,9 @@ class RWKVChaterEmbryo(RWKVEmbryo):
                 await asyncio.sleep(0)
                 logits = self.state.logits
                 logits = await self.process_token_penalty(logits)
-                token: int = sampling.sample_logits(logits, self.temperature, self.top_p)
+                token: int = sampling.sample_logits(
+                    logits, self.temperature, self.top_p
+                )
                 await self.process_token(token)
                 answer += tokenizer.decodeBytes([token])
                 if end in answer:
