@@ -213,7 +213,7 @@ class RWKVEmbryo:
             self.need_save = False
 
     @log_call
-    async def reset_state(self, quiet: bool = False, q: bool = False):
+    async def reset_state(self, q: bool = False):
         await self.load_state(self.default_state, q=q)
         await self.save_state(self.id, q=q)
         self.ulog.write(" : Reset_state")
