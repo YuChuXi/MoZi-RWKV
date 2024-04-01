@@ -33,11 +33,13 @@ def use_async_lock(func):
     return nfunc
 
 def run_in_async_thread(func):
-    if sys.version_info.micro < 9:
-        return func
-    async def nfunc(*args, **kwargs):
+    if sys.version_info.minor < 9:
+        async def nfunc(*args, **kwargs) -> asyncio.coroutine:
+            return func(*args, **kwargs)
+        return nfunc
+    async def nfunc(*args, **kwargs) -> asyncio.coroutine:
         thread = asyncio.to_thread(func, *args, **kwargs)
-        return await thread
+        return thread
     return nfunc
 
 symbols = "[!@#$%^&*+[\]{};:/<>?\|`~]"

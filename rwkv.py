@@ -168,7 +168,6 @@ class RWKVEmbryo:
         self.mlog.close()
         self.ulog.close()
 
-    @use_async_lock
     @log_call
     async def load_state(
         self, state_name: str, prompt: str = None, reprompt=False, q: bool = False
@@ -207,7 +206,6 @@ class RWKVEmbryo:
                 prxxx(f"Load state   name: {state_name}", q=q)
             break
 
-    @use_async_lock
     @log_call
     async def save_state(self, state_name: str, q: bool = False):
         if self.need_save:
@@ -215,7 +213,6 @@ class RWKVEmbryo:
             prxxx(f"Save state   name: {state_name}", q=q)
             self.need_save = False
 
-    @use_async_lock
     @log_call
     async def reset_state(self, quiet: bool = False, q: bool = False):
         await self.load_state(self.default_state, q=q)
@@ -286,7 +283,6 @@ class RWKVEmbryo:
             )
         return logits
 
-    @use_async_lock
     @log_call
     async def process_tokens(self, tokens: List[int]):
         """
@@ -309,7 +305,6 @@ class RWKVEmbryo:
         self.mlog.write(tokenizer.decodeBytes(tokens))
         return self.state.logits, self.state.state
 
-    @use_async_lock
     @log_call
     async def process_token(self, token: int):
         await asyncio.sleep(0)
@@ -356,6 +351,7 @@ assert default_init_prompt != "", "Prompt must not be empty"
 class RWKVChaterEmbryo(RWKVEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
+        self.process_lock = asyncio.Lock()
 
     async def gen_prompt(
         self,
@@ -388,32 +384,31 @@ class RWKVChaterEmbryo(RWKVEmbryo):
 
         return prompt
 
-    @use_async_lock
     async def gen_future(self, end_of: str = "\n\n") -> str:
-        answer: bytes = b""
-        end: bytes = end_of.encode("utf-8")
-        for i in tqdm.trange(
-            MAX_GENERATION_LENGTH,
-            desc="Processing future",
-            leave=False,
-            unit=" tok",
-        ):
-            await asyncio.sleep(0)
-            logits = self.state.logits
-            logits = await self.process_token_penalty(logits)
-            token: int = sampling.sample_logits(logits, self.temperature, self.top_p)
-            await self.process_token(token)
-            answer += tokenizer.decodeBytes([token])
-            if end in answer:
-                break
-        return answer.decode("utf-8").strip()
+        async with self.process_lock:
+            answer: bytes = b""
+            end: bytes = end_of.encode("utf-8")
+            for i in tqdm.trange(
+                MAX_GENERATION_LENGTH,
+                desc="Processing future",
+                leave=False,
+                unit=" tok",
+            ):
+                await asyncio.sleep(0)
+                logits = self.state.logits
+                logits = await self.process_token_penalty(logits)
+                token: int = sampling.sample_logits(logits, self.temperature, self.top_p)
+                await self.process_token(token)
+                answer += tokenizer.decodeBytes([token])
+                if end in answer:
+                    break
+            return answer.decode("utf-8").strip()
 
 
 class RWKVChater(RWKVChaterEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
 
-    @use_async_lock
     async def chat(
         self,
         message: str,
@@ -457,11 +452,11 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         super().__init__(id, state_name, prompt)
         self.message_cache: List[List[object]] = []
 
-    @use_async_lock
     async def send_message(self, message: str, chatuser: str = user) -> None:
         self.message_cache.append([chatuser, message, time.time()])
+        if len(self.message_cache) > 128:
+            self.message_cache = self.message_cache[64]
 
-    @use_async_lock
     async def get_answer(
         self,
         nickname: str = bot,

@@ -280,7 +280,7 @@ async def W_group_chat():
             )
 
 
-@app.before_serving
+# @app.before_serving
 async def before_serving():
     #app.add_background_task(time_to_save)
     await process_default_state()
@@ -310,6 +310,7 @@ async def after_serving():
 
 
 async def main():
+    await before_serving() # fix: timeout wen shutup
     config = Config()
     config.bind = ["0.0.0.0:8088"]
     config.use_reloader = True
