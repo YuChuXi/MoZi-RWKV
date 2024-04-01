@@ -1,4 +1,6 @@
 numpy
 torch
-waitress
-flask
+quart
+hypercorn
+tqdm
+typing
