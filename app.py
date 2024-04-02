@@ -39,26 +39,28 @@ async def save_chaters_state():
     for id in tqdm.tqdm(chaters, desc="Save chater", leave=False, unit="chr"):
         await asyncio.sleep(0)
         await chaters[id].save_state(id, q=True)
-    for id in tqdm.tqdm(group_chaters, desc="Save grpup chater", leave=False, unit="chr"):
+    for id in tqdm.tqdm(
+        group_chaters, desc="Save grpup chater", leave=False, unit="chr"
+    ):
         await asyncio.sleep(0)
         await group_chaters[id].save_state(id, q=True)
 
 
 async def time_to_save():
     while True:
-        for i in range(SAVE_TIME): # 防止卡服务器关闭
+        for i in range(SAVE_TIME):  # 防止卡服务器关闭
             await asyncio.sleep(1)
         await save_chaters_state()
 
 
-async def chat(kwargs: Dict[str, object]):
-    message: str = kwargs.get("message", "")
-    id: str = clean_symbols(kwargs.get("id", "-b2bi0JgEhJru87HTcRjh9vdT"))
-    user: str = kwargs.get("user", "木子")
-    nickname: str = kwargs.get("nickname", "墨子")
-    state: str = kwargs.get("state", None)
-    # message = message if len(message) <= 256 else message[:256]
-
+async def chat(
+    message: str,
+    id: str = "-b2bi0JgEhJru87HTcRjh9vdT",
+    user: str = "木子",
+    nickname: str = "墨子",
+    state: str = None,
+) -> str:
+    id = clean_symbols(id)
     echo = gen_echo()
     prxxx()
     if not id in chaters:
@@ -77,13 +79,15 @@ async def chat(kwargs: Dict[str, object]):
     return answer
 
 
-async def group_chat_send(kwargs: Dict[str, object]):
-    message: str = kwargs.get("message", "").strip()
-    id: str = clean_symbols(kwargs.get("id", "-b2bi0JgEhJru87HTcRjh9vdT"))
-    user: str = kwargs.get("user", "木子")
-    state: str = kwargs.get("state", None)
+async def group_chat_send(
+    message: str,
+    id: str = "-b2bi0JgEhJru87HTcRjh9vdT",
+    user: str = "木子",
+    state: str = None,
+) -> str:
+    id = clean_symbols(id)
 
-    if len(message) == 0 :
+    if len(message) == 0:
         return
 
     echo = gen_echo()
@@ -97,17 +101,19 @@ async def group_chat_send(kwargs: Dict[str, object]):
     await group_chaters[id].send_message(message=message, chatuser=user)
 
 
-async def group_chat_get(kwargs: Dict[str, object]):
-    id: str = clean_symbols(kwargs.get("id", "-b2bi0JgEhJru87HTcRjh9vdT"))
-    nickname: str = kwargs.get("nickname", "墨子")
-    state: str = kwargs.get("state", None)
+async def group_chat_get(
+    id: str = "-b2bi0JgEhJru87HTcRjh9vdT",
+    nickname: str = "墨子",
+    state: str = None,
+) -> str:
+    id = clean_symbols(id)
 
     echo = gen_echo()
     prxxx()
     if not id in group_chaters:
         group_chaters[id] = RWKVGroupChater(id, state_name=state)
         await group_chaters[id].init_state()
-    
+
     answer = await group_chaters[id].get_answer(nickname=nickname)
     prxxx(f" #    Get gchat   id: {id} | nickname: {nickname} | echo: {echo}")
     prxxx(f" #  {echo}-[{answer}]<--")
@@ -118,9 +124,8 @@ async def group_chat_get(kwargs: Dict[str, object]):
     return answer
 
 
-async def nickname(kwargs: Dict[str, object]):
+async def nickname(name:str):
     echo = gen_echo()
-    name = kwargs.get("name", "")
     prxxx()
     prxxx(f" #    GenNickname   echo: {echo}")
     prxxx(f" #    -->[{name}]-{echo}")
@@ -133,8 +138,9 @@ async def nickname(kwargs: Dict[str, object]):
         nickname = name
     return nickname
 
-async def reset_state(kwargs):
-    id = kwargs["id"]
+
+async def reset_state(id:str):
+    id=clean_symbols(id)
     flag = False
     if id in chaters:
         await chaters[id].reset_state()
@@ -151,9 +157,7 @@ async def R_chat():
         kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
-    else:
-        return "fuck you!"
-    answer = await chat(kwargs)
+    answer = await chat(**kwargs)
     return {"message": answer, "state": "ok"}
 
 
@@ -163,9 +167,7 @@ async def R_group_chat_send():
         kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
-    else:
-        return "fuck you!"
-    answer = await group_chat_send(kwargs)
+    await group_chat_send(**kwargs)
     return {"state": "ok"}
 
 
@@ -175,9 +177,7 @@ async def R_group_chat_get():
         kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
-    else:
-        return "fuck you!"
-    answer = await group_chat_get(kwargs)
+    answer = await group_chat_get(**kwargs)
     return {"message": answer, "state": "ok"}
 
 
@@ -187,9 +187,7 @@ async def R_nickname():
         kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
-    else:
-        return "fuck you!"
-    nickname = await nickname(kwargs)
+    nickname = await nickname(**kwargs)
     return {"nickname": nickname, "state": "ok"}
 
 
@@ -199,11 +197,8 @@ async def R_reset_state():
         kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
-    else:
-        return "fuck you!"
-    flag = await reset_state(kwargs)
+    flag = await reset_state(**kwargs)
     return {"state": "ok" if flag else "a?"}
-
 
 
 @app.route("/restart", methods=["GET"])
@@ -241,7 +236,7 @@ async def W_chat():
             echo*
         }
         """
-        answer = await chat(data)
+        answer = await chat(**data)
         await websocket.send(
             json.dumps({"message": answer, "state": "OK", "echo": data.get("echo", "")})
         )
@@ -263,12 +258,12 @@ async def W_group_chat():
         }
         """
         if data["action"] == "send":
-            await group_chat_send(data)
+            await group_chat_send(**data)
             await websocket.send(
                 json.dumps({"state": "OK", "echo": data.get("echo", "")})
             )
         elif data["action"] == "get":
-            answer = await group_chat_get(data)
+            answer = await group_chat_get(**data)
             await websocket.send(
                 json.dumps(
                     {"message": answer, "state": "OK", "echo": data.get("echo", "")}
@@ -282,17 +277,19 @@ async def W_group_chat():
 
 # @app.before_serving
 async def before_serving():
-    #app.add_background_task(time_to_save)
+    # app.add_background_task(time_to_save)
     await process_default_state()
     chaters["init"] = RWKVChater("init")
     await chaters["init"].init_state()
     prxxx(f"State size: {chaters['init'].state.state.size}")
     await chaters["init"].reset_state()
-    await chat({
-        "id":"init",
-        "message":test_message,
-        "user":"测试者",
-    })
+    await chat(
+        **{
+            "id": "init",
+            "message": test_message,
+            "user": "测试者",
+        }
+    )
 
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
@@ -310,11 +307,15 @@ async def after_serving():
 
 
 async def main():
-    await before_serving() # fix: timeout wen shutup
+    await before_serving()  # fix: timeout wen shutup
     config = Config()
     config.bind = ["0.0.0.0:8088"]
     config.use_reloader = True
     config.loglevel = "debug"
+    """
+    for i in tqdm.trange(99999):
+        await group_chat_send({"id":"ggtgg","message":"uuuu","user":"yyyyy"})
+    """
     await serve(app, config)
 
 

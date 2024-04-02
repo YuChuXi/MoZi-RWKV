@@ -209,6 +209,8 @@ class RWKVEmbryo:
     async def save_state(self, state_name: str, must: bool = False, q: bool = False):
         if self.need_save or must:
             await self.state.save(state_name)
+            self.mlog.flush()
+            self.ulog.flush()
             prxxx(f"Save state   name: {state_name}", q=q)
             self.need_save = False
 
