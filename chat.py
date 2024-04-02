@@ -1,5 +1,6 @@
 import time
 import requests
+import tqdm
 
 """
 message = input("Seed: ")
@@ -11,6 +12,8 @@ while True:
     bak = requests.post("http://localhost:8088/message",data = {"msg":message,"id":"-2","user":"B"})
     message = bak.json()["text"]
     """
+
+"""
 if input("reset?") == "y":
     print(
         requests.post(
@@ -34,6 +37,8 @@ print(
         },
     ).json()["text"]
 )
+
+"""
 
 p = """夏次依锭： 你好，墨子。
 
@@ -276,6 +281,7 @@ W墨： 新来的？小心晚上的怪物！魔王城就在附近！
 # print(requests.post("http://localhost:8088/message",data = {"msg":p,"id":"-i6trfghji87tf","user":"夏次依锭"}).json()["text"])
 
 # time.sleep(100)
+"""
 while True:
     print(
         requests.post(
@@ -290,3 +296,7 @@ while True:
     )
     # print(requests.post("http://localhost:8088/message",data = {"msg":"+reset","id":"-1dfg","user":"玉子"}).json()["text"])
     time.sleep(1)
+"""
+
+for i in tqdm.trange(99999):
+    requests.get("http://127.0.0.1:8088/group_chat_send?id=ggggg&message=66666&username=777")
