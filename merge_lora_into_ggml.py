@@ -13,7 +13,7 @@ from typing import List, Dict, Tuple
 def parse_args():
     parser = argparse.ArgumentParser(description='Merge a PyTorch LoRA checkpoint (.pth) into an rwkv.cpp model file')
     parser.add_argument('src_path', help='Path to source rwkv.cpp model')
-    parser.add_argument('rwkv_arch_version', help='Version of RWKV architecture: v4, v5.1, v5.2', type=str, choices=['v4', 'v5.1', 'v5.2'])
+    parser.add_argument('rwkv_arch_version', help='Version of RWKV architecture: v4, v5.1, v5.2, v6.0', type=str, choices=['v4', 'v5.1', 'v5.2', 'v6.0'])
     parser.add_argument('lora_path', help='Path to LoRA checkpoint in PyTorch format')
     parser.add_argument('lora_alpha', help='Value of lora_alpha parameter used when training this LoRA checkpoint', type=int)
     parser.add_argument('dest_path', help='Path to destination rwkv.cpp model, will be overwitten with the merged model')
@@ -47,7 +47,8 @@ def main() -> None:
 
     arch_version: str = args.rwkv_arch_version
 
-    assert arch_version == 'v4' or arch_version == 'v5.1' or arch_version == 'v5.2', f'Invalid RWKV architecture version {arch_version}'
+    if not (arch_version == 'v4' or arch_version == 'v5.1' or arch_version == 'v5.2' or arch_version == 'v6.0'):
+        raise ValueError(f'Invalid RWKV architecture version {arch_version}')
 
     print(f'Reading {args.lora_path}')
 
@@ -59,9 +60,12 @@ def main() -> None:
         # noinspection PyTypeChecker
         header: Tuple[int, int, int, int, int, int] = struct.unpack('=iiiiii', in_file.read(6 * 4))
 
-        assert header[0] == 0x67676d66, 'Invalid magic value'
-        assert 100 <= header[1] <= 101, 'Invalid version number'
-        assert header[5] == 0 or header[5] == 1, 'Only FP32 and FP16 models are supported'
+        if header[0] != 0x67676d66:
+            raise ValueError(f'Invalid magic value {header[0]:x}')
+        if not (100 <= header[1] <= 101):
+            raise ValueError(f'Invalid version number {header[1]}')
+        if not (header[5] == 0 or header[5] == 1):
+            raise ValueError('Only FP32 and FP16 models are supported')
 
         out_file.write(struct.pack('=iiiiii', *header))
 
@@ -82,7 +86,8 @@ def main() -> None:
 
             print(f'* {key} {shape}')
 
-            assert data_type == 0 or data_type == 1, 'Only FP32 and FP16 models are supported'
+            if not (data_type == 0 or data_type == 1):
+                raise ValueError('Only FP32 and FP16 models are supported')
 
             element_count: int = 1
 
@@ -103,6 +108,9 @@ def main() -> None:
                 if '.time_' in key:
                     replacement = replacement.squeeze()
 
+                if arch_version == 'v6.0':
+                    if '.time_faaaa' in key:
+                        replacement = replacement.unsqueeze(-1)
                 if arch_version == 'v5.1' or arch_version == 'v5.2':
                     if '.time_decay' in key:
                         if arch_version == 'v5.2':
@@ -122,8 +130,9 @@ def main() -> None:
                 if parameter.dtype == torch.float16:
                     replacement = replacement.half()
 
-                assert replacement.shape == parameter.shape, f'Parameter {key} has shape {parameter.shape} in model file ' \
-                                                             f'and shape {replacement.shape} in LoRA file'
+                if replacement.shape != parameter.shape:
+                    raise ValueError(f'Parameter {key} has shape {parameter.shape} in model file ' \
+                                     f'and shape {replacement.shape} in LoRA file')
 
                 parameter = replacement
 
@@ -139,8 +148,9 @@ def main() -> None:
                     lora_A: torch.Tensor = lora_state_dict[lora_A_key]
                     lora_B: torch.Tensor = lora_state_dict[lora_B_key]
 
-                    assert lora_B.shape[1] == lora_A.shape[0], f'Invalid shape of LoRA matrices for {key}: ' \
-                                                               f'{lora_A.shape}, {lora_B.shape}'
+                    if lora_B.shape[1] != lora_A.shape[0]:
+                        raise ValueError(f'Invalid shape of LoRA matrices for {key}: ' \
+                                         f'{lora_A.shape}, {lora_B.shape}')
 
                     lora_R: int = lora_B.shape[1]
 

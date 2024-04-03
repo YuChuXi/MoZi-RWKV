@@ -58,6 +58,7 @@ np.random.seed(int(time.time() * 1e6 % 2**30))
 model_name = "RWKV-5-Qun-1B5-Q4_0"
 model_name = "RWKV-5-World-3B-Q5_0-v2"
 model_name = "RWKV-5-World-7B-Q5_1-v2"
+model_name = "RWKV-6-World-1B6-Q5_1-v2v1"
 model_name = "RWKV-5-World-1B5-Q5_1-v2"
 
 model_path = f"model/{model_name}.bin"
