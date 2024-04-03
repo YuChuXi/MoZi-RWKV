@@ -25,12 +25,14 @@ app = Quart(__name__)
 
 
 def restart():
+    # app.shutdown()
     python = sys.executable
     prxxx("### Restart ! ###")
     os.execl(python, python, *sys.argv)
 
 
-def stop():
+def stop(signal=None, frame=None):
+    #app.shutdown()
     prxxx("### STOP ! ###")
     sys.exit()
 
