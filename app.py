@@ -30,9 +30,9 @@ def restart():
     os.execl(python, python, *sys.argv)
 
 
-def stop(signal=None, frame=None):
+def stop():
     prxxx("### STOP ! ###")
-    sys.exit(0)
+    sys.exit()
 
 
 async def save_chaters_state():
@@ -204,7 +204,7 @@ async def R_reset_state():
 @app.route("/restart", methods=["GET"])
 async def R_restart():
     if request.args["passwd_gkd"] == "ihAVEcODE":
-        await save_chaters_state()
+        await app.shutdown()
         restart()
     return {"state": "fuck you!"}
 
@@ -212,7 +212,7 @@ async def R_restart():
 @app.route("/stop", methods=["GET"])
 async def R_stop():
     if request.args["passwd_gkd"] == "ihAVEcODE":
-        await save_chaters_state()
+        await app.shutdown()
         stop()
     return {"state": "fuck you!"}
 

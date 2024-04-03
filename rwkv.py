@@ -217,7 +217,7 @@ class RWKVEmbryo:
     @log_call
     async def reset_state(self, q: bool = False):
         await self.load_state(self.default_state, q=q)
-        await self.save_state(self.id, q=q)
+        await self.save_state(self.id, must=True, q=q)
         self.ulog.write(" : Reset_state")
 
     async def init_state(self):
@@ -405,7 +405,8 @@ class RWKVChaterEmbryo(RWKVEmbryo):
                 answer += tokenizer.decodeBytes([token])
                 if end in answer:
                     break
-            return answer.decode("utf-8").strip()
+            self.need_save = True
+        return answer.decode("utf-8").strip()
 
 
 class RWKVChater(RWKVChaterEmbryo):
