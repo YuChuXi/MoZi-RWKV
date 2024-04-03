@@ -39,7 +39,7 @@ def run_in_async_thread(func):
         return nfunc
     async def nfunc(*args, **kwargs) -> asyncio.coroutine:
         thread = asyncio.to_thread(func, *args, **kwargs)
-        return thread
+        return await thread
     return nfunc
 
 symbols = "[!@#$%^&*+[\]{};:/<>?\|`~]"
