@@ -50,7 +50,7 @@ PENALTY_MITIGATE: float = 1.02
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
 END_OF_TEXT_TOKEN: int = 0
 
-THREADS: int = 3
+THREADS: int = 4
 
 
 np.random.seed(int(time.time() * 1e6 % 2**30))
@@ -163,11 +163,9 @@ class RWKVEmbryo:
         self.top_p: float = TOP_P
 
         self.mlog = open(f"data/{self.id}/model.log", "ab+")
-        self.ulog = open(f"data/{self.id}/user.log", "a+", encoding="utf-8")
 
     def __del__(self):
         self.mlog.close()
-        self.ulog.close()
 
     @log_call
     async def load_state(
@@ -211,7 +209,6 @@ class RWKVEmbryo:
         if self.need_save or must:
             await self.state.save(state_name)
             self.mlog.flush()
-            self.ulog.flush()
             prxxx(f"Save state   name: {state_name}", q=q)
             self.need_save = False
 
@@ -219,7 +216,6 @@ class RWKVEmbryo:
     async def reset_state(self, q: bool = False):
         await self.load_state(self.default_state, q=q)
         await self.save_state(self.id, must=True, q=q)
-        self.ulog.write(" : Reset_state")
 
     async def init_state(self):
         await self.load_state(self.id, self.prompt)
@@ -358,8 +354,8 @@ class RWKVChaterEmbryo(RWKVEmbryo):
     async def gen_prompt(
         self,
         message_list: List[List[object]],
-        time_limit: float = 3600,
-        ctx_limit: int = 256,
+        time_limit: float = 1800,
+        ctx_limit: int = 1024,
     ):
         """
         [
@@ -420,8 +416,6 @@ class RWKVChater(RWKVChaterEmbryo):
         chatuser: str = user,
         nickname: str = bot,
     ):
-        self.ulog.write(f"{chatuser}: {message}\n")
-
         if "-temp=" in message:
             temperature = float(message.split("-temp=")[1].split(" ")[0])
             message = message.replace("-temp=" + f"{temperature:g}", "")
@@ -447,7 +441,6 @@ class RWKVChater(RWKVChaterEmbryo):
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
 
-        self.ulog.write(f"{nickname}: {answer}\n")
         # self.save_state(self.id, q=True)
         return answer
 
@@ -471,7 +464,6 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         answer = await self.gen_future(end_of="\n\n")
 
         answer = answer.replace(bot, nickname).strip()
-        self.ulog.write(f"{nickname}: {answer}\n")
         # self.save_state(self.id, q=True)
         return answer
 
@@ -516,8 +508,6 @@ class RWKVNicknameGener(RWKVEmbryo):
         self.top_p: float = TOP_P
 
     async def gen_nickname(self, name):
-        self.ulog.write(f"用户名: {name}\n称呼: ")
-
         new = f"用户名: {name}\n称呼: "
         await self.process_tokens(tokenizer.encode(new))
         answer = await self.gen_future(end_of="\n\n")
