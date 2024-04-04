@@ -151,6 +151,7 @@ class RWKVEmbryo:
         self.id: str = str(id)
         self.prompt: str = prompt
         self.default_state: str = state_name
+        self.process_lock = asyncio.Lock()
 
         self.state = RWKVState()
         self.need_save = False
@@ -316,6 +317,29 @@ class RWKVEmbryo:
         self.mlog.write(tokenizer.decodeBytes([token]))
         return self.state.logits, self.state.state
 
+    async def gen_future(self, end_of: str = "\n\n") -> str:
+        async with self.process_lock:
+            answer: bytes = b""
+            end: bytes = end_of.encode("utf-8")
+            for i in tqdm.trange(
+                MAX_GENERATION_LENGTH,
+                desc="Processing future",
+                leave=False,
+                unit=" tok",
+            ):
+                await asyncio.sleep(0)
+                logits = self.state.logits
+                logits = await self.process_token_penalty(logits)
+                token: int = sampling.sample_logits(
+                    logits, self.temperature, self.top_p
+                )
+                await self.process_token(token)
+                answer += tokenizer.decodeBytes([token])
+                if end in answer:
+                    break
+            self.need_save = True
+        return answer.decode("utf-8").strip()
+    
     async def call(self, api: str, kwargs: Dict[str, object]):
         return await getattr(self, api)(**kwargs)
 
@@ -349,7 +373,6 @@ assert default_init_prompt != "", "Prompt must not be empty"
 class RWKVChaterEmbryo(RWKVEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
-        self.process_lock = asyncio.Lock()
 
     async def gen_prompt(
         self,
@@ -382,28 +405,6 @@ class RWKVChaterEmbryo(RWKVEmbryo):
 
         return prompt
 
-    async def gen_future(self, end_of: str = "\n\n") -> str:
-        async with self.process_lock:
-            answer: bytes = b""
-            end: bytes = end_of.encode("utf-8")
-            for i in tqdm.trange(
-                MAX_GENERATION_LENGTH,
-                desc="Processing future",
-                leave=False,
-                unit=" tok",
-            ):
-                await asyncio.sleep(0)
-                logits = self.state.logits
-                logits = await self.process_token_penalty(logits)
-                token: int = sampling.sample_logits(
-                    logits, self.temperature, self.top_p
-                )
-                await self.process_token(token)
-                answer += tokenizer.decodeBytes([token])
-                if end in answer:
-                    break
-            self.need_save = True
-        return answer.decode("utf-8").strip()
 
 
 class RWKVChater(RWKVChaterEmbryo):
@@ -504,8 +505,8 @@ prompt = """注:
 class RWKVNicknameGener(RWKVEmbryo):
     def __init__(self):
         super().__init__("-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", prompt)
-        self.temperature: float = TEMPERATURE
-        self.top_p: float = TOP_P
+        self.temperature: float = 0.3
+        self.top_p: float = 0.1
 
     async def gen_nickname(self, name):
         new = f"用户名: {name}\n称呼: "

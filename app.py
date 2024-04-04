@@ -126,7 +126,7 @@ async def group_chat_get(
     return answer
 
 
-async def nickname(name:str):
+async def gen_nickname(name:str):
     echo = gen_echo()
     prxxx()
     prxxx(f" #    GenNickname   echo: {echo}")
@@ -189,7 +189,7 @@ async def R_nickname():
         kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
-    nickname = await nickname(**kwargs)
+    nickname = await gen_nickname(**kwargs)
     return {"nickname": nickname, "state": "ok"}
 
 
