@@ -317,12 +317,14 @@ class RWKVEmbryo:
         self.mlog.write(tokenizer.decodeBytes([token]))
         return self.state.logits, self.state.state
 
-    async def gen_future(self, end_of: str = "\n\n") -> str:
+    async def gen_future(
+        self, max_len: int = MAX_GENERATION_LENGTH, end_of: str = "\n\n"
+    ) -> str:
         async with self.process_lock:
             answer: bytes = b""
             end: bytes = end_of.encode("utf-8")
             for i in tqdm.trange(
-                MAX_GENERATION_LENGTH,
+                max_len,
                 desc="Processing future",
                 leave=False,
                 unit=" tok",
@@ -339,7 +341,7 @@ class RWKVEmbryo:
                     break
             self.need_save = True
         return answer.decode("utf-8").strip()
-    
+
     async def call(self, api: str, kwargs: Dict[str, object]):
         return await getattr(self, api)(**kwargs)
 
@@ -406,7 +408,6 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         return prompt
 
 
-
 class RWKVChater(RWKVChaterEmbryo):
     def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
         super().__init__(id, state_name, prompt)
@@ -471,19 +472,13 @@ class RWKVGroupChater(RWKVChaterEmbryo):
 
 # ======================================== Gener settings =========================================
 prompt = """注: 
-以下是一张用户名与称呼的对照表，称呼是用户名中最具有特色的部分, 长度在五个字以内. 
+以下是一张用户名与称呼的对照表，称呼是用户名中最具有特色的部分, 且尽可能短. 
 
 用户名: 玉子是个废物喵
 称呼: 玉子
 
 用户名: 沐沐
 称呼: 沐沐
-
-用户名: 咦我的名字呢？
-称呼: 没名字
-
-用户名: YuChuXi
-称呼: YuChuXi
 
 用户名: 墨子不是猫
 称呼: 墨子
@@ -507,11 +502,17 @@ class RWKVNicknameGener(RWKVEmbryo):
         super().__init__("-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", prompt)
         self.temperature: float = 0.3
         self.top_p: float = 0.1
+        self.penalty_mitigate = 0.98
+        self.presence_penalty = -1
+        self.repeat_penalty = 1
+        self.frequency_penalty = 0
 
     async def gen_nickname(self, name):
+        self.state.processed_tokens = []
+        self.state.processed_tokens_counts = {}
         new = f"用户名: {name}\n称呼: "
         await self.process_tokens(tokenizer.encode(new))
-        answer = await self.gen_future(end_of="\n\n")
+        answer = await self.gen_future(max_len=10, end_of="\n\n")
 
         await self.reset_state(q=True)
         return answer
