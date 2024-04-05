@@ -142,6 +142,13 @@ class RWKVState:
         staot0.logits = staot0.logits * (1-weight) + state.logits * weight
 
         return staot0
+    
+    @run_in_async_thread
+    def mix_(self, state, weight:float):        
+        self.state = self.state * (1-weight) + state.state * weight
+        self.logits = self.logits * (1-weight) + state.logits * weight
+
+        return self
 
 state_cache: Dict[str, RWKVState] = {}
 
@@ -450,9 +457,8 @@ class RWKVChater(RWKVChaterEmbryo):
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
         
-        self.state = await (self.state.mix(state_cache[model_state_name],0.07))
+        await (self.state.mix_(state_cache[self.default_state],0.07))
 
-        # self.save_state(self.id, q=True)
         return answer
 
 
@@ -475,7 +481,9 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         answer = await self.gen_future(end_of="\n\n")
 
         answer = answer.replace(bot, nickname).strip()
-        # self.save_state(self.id, q=True)
+
+        await (self.state.mix_(state_cache[self.default_state],0.07))
+
         return answer
 
 
