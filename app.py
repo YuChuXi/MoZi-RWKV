@@ -281,6 +281,7 @@ async def W_group_chat():
 async def before_serving():
     # app.add_background_task(time_to_save)
     await process_default_state()
+    await nicknameGener.init_state()
     chaters["init"] = RWKVChater("init")
     await chaters["init"].init_state()
     prxxx(f"State size: {chaters['init'].state.state.size}")

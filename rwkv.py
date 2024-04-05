@@ -483,23 +483,23 @@ class RWKVGroupChater(RWKVChaterEmbryo):
 prompt = """注: 
 以下是一张用户名与称呼的对照表，称呼是用户名中最具有特色的部分, 且尽可能短. 
 
-用户名: 玉子是个废物喵
-称呼: 玉子
+玉子是个废物喵
+玉子
 
-用户名: 沐沐
-称呼: 沐沐
+沐沐
+沐沐
 
-用户名: 墨子不是猫
-称呼: 墨子
+墨子不是猫
+墨子
 
-用户名: 不想加班的朋朋
-称呼: 朋朋
+不想加班的朋朋
+朋朋
 
-用户名: 只有鱼骨头吃的喵
-称呼: 鱼骨头喵
+只有鱼骨头吃的喵
+鱼骨头喵
 
-用户名: 猫猫博士凌枫
-称呼: 猫猫博士
+猫猫博士凌枫
+猫猫博士
 
 
 """
@@ -519,7 +519,7 @@ class RWKVNicknameGener(RWKVEmbryo):
     async def gen_nickname(self, name):
         self.state.processed_tokens = []
         self.state.processed_tokens_counts = {}
-        new = f"用户名: {name}\n称呼: "
+        new = f"{name}\n"
         await self.process_tokens(tokenizer.encode(new))
         answer = await self.gen_future(max_len=10, end_of="\n\n")
 
