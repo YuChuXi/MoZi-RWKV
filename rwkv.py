@@ -134,7 +134,14 @@ class RWKVState:
         for k in self.data:
             new_state.__dict__[k] = self.__dict__[k].copy()
         return new_state
+    
+    async def mix(self, state, weight:float):
+        staot0 = await self.copy()
+        
+        staot0.state = staot0.state * (1-weight) + state.state * weight
+        staot0.logits = staot0.logits * (1-weight) + state.logits * weight
 
+        return staot0
 
 state_cache: Dict[str, RWKVState] = {}
 
@@ -442,6 +449,8 @@ class RWKVChater(RWKVChaterEmbryo):
 
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
+        
+        self.state = await (self.state.mix(state_cache[model_state_name],0.07))
 
         # self.save_state(self.id, q=True)
         return answer
@@ -537,3 +546,4 @@ print(tokenizer.decode(RWKVChaterEmbryo.gen_prompt(None,[
     
 ],time_limit=3600,ctx_limit=1)))
 # """
+

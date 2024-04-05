@@ -6,41 +6,42 @@ import tqdm
 message = input("Seed: ")
 while True:
     print("A",message)
-    bak = requests.post("http://localhost:8088/message",data = {"msg":message,"id":"-1","user":"A"})
+    bak = requests.post("http://localhost:8088/chat",data = {"msg":message,"id":"-1","user":"A"})
     message = bak.json()["text"]
     print("B",message)
-    bak = requests.post("http://localhost:8088/message",data = {"msg":message,"id":"-2","user":"B"})
+    bak = requests.post("http://localhost:8088/chat",data = {"msg":message,"id":"-2","user":"B"})
     message = bak.json()["text"]
     """
 
-"""
+
 if input("reset?") == "y":
     print(
         requests.post(
-            "http://localhost:8088/message",
+            "http://localhost:8088/chat",
             data={
-                "msg": "+reset",
+                "message": "+reset",
                 "id": "-i6trfghji87tf",
-                "user": "玉子",
-                "state": "xiaci.default.state",
+                "user": "小桐",
             },
-        ).json()["text"]
+        ).json()["message"]
     )
-print(
-    requests.post(
-        "http://localhost:8088/message",
-        data={
-            "msg": input("a:"),
-            "id": "-i6trfghji87tf",
-            "user": "小桐",
-            "state": "default.state",
-        },
-    ).json()["text"]
-)
+
+"""
+while True:
+    print(
+        requests.post(
+            "http://localhost:8088/chat",
+            data={
+                "message": input("a:"),
+                "id": "-i6trfghji87tf",
+                "user": "小桐",
+            },
+        ).json()["message"]
+    )
 
 """
 
-p = """夏次依锭： 你好，墨子。
+p = """你好，墨子。
 
 墨子： 夏次依锭？你怎么来了啊？
 
@@ -278,25 +279,25 @@ W墨： 新来的？小心晚上的怪物！魔王城就在附近！
 
 夏次依锭： 不了吧，我好饿。"""
 
-# print(requests.post("http://localhost:8088/message",data = {"msg":p,"id":"-i6trfghji87tf","user":"夏次依锭"}).json()["text"])
+#print(requests.post("http://localhost:8088/chat",data = {"message":p,"id":"-i6trfghji87tf","user":"夏次依锭"}).json()["message"])
 
 # time.sleep(100)
-"""
 while True:
     print(
         requests.post(
-            "http://localhost:8088/message",
+            "http://localhost:8088/chat",
             data={
-                "msg": "+",
+                "message": "+",
                 "id": "-i6trfghji87tf",
                 "user": "小桐",
-                "state": "default.state",
             },
-        ).json()["text"]
+        ).json()["message"]
     )
-    # print(requests.post("http://localhost:8088/message",data = {"msg":"+reset","id":"-1dfg","user":"玉子"}).json()["text"])
+    # print(requests.post("http://localhost:8088/chat",data = {"msg":"+reset","id":"-1dfg","user":"玉子"}).json()["text"])
     time.sleep(1)
 """
 
 for i in tqdm.trange(99999):
     requests.get("http://127.0.0.1:8088/group_chat_send?id=ggggg&message=66666&username=777")
+
+    """
