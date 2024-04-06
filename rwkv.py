@@ -144,7 +144,7 @@ class RWKVState:
         return staot0
     
     @run_in_async_thread
-    def mix_(self, state, weight:float):        
+    def mix_inplace(self, state, weight:float):        
         self.state = self.state * (1-weight) + state.state * weight
         self.logits = self.logits * (1-weight) + state.logits * weight
 
@@ -452,13 +452,14 @@ class RWKVChater(RWKVChaterEmbryo):
         if message != "+":
             new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
             await self.process_tokens(tokenizer.encode(new))
+        
+        await self.state.mix_inplace(state_cache[self.default_state],0.07)
+
         answer = await self.gen_future(end_of="\n\n")
 
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
         
-        await (self.state.mix_(state_cache[self.default_state],0.07))
-
         return answer
 
 
@@ -478,11 +479,11 @@ class RWKVGroupChater(RWKVChaterEmbryo):
     ) -> str:
         await self.process_tokens(await self.gen_prompt(self.message_cache))
         self.message_cache.clear()
+        await self.state.mix_inplace(state_cache[self.default_state],0.07)
+
         answer = await self.gen_future(end_of="\n\n")
 
         answer = answer.replace(bot, nickname).strip()
-
-        await (self.state.mix_(state_cache[self.default_state],0.07))
 
         return answer
 
