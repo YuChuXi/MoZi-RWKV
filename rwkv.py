@@ -38,19 +38,19 @@ TOP_P: float = 0.5
 # Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
 PRESENCE_PENALTY: float = 0.7
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
-
 FREQUENCY_PENALTY: float = 1.0
 # When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.2 is a good idea.
 PRPEAT_PENALTY: float = 1.05
-
 # a?
 PENALTY_MITIGATE: float = 1.02
+#
+OBSTINATE: float = 0.07
 
 # END_OF_LINE_TOKEN: int = 187
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
 END_OF_TEXT_TOKEN: int = 0
 
-THREADS: int = 4
+THREADS: int = 3
 
 
 np.random.seed(int(time.time() * 1e6 % 2**30))
@@ -134,21 +134,22 @@ class RWKVState:
         for k in self.data:
             new_state.__dict__[k] = self.__dict__[k].copy()
         return new_state
-    
-    async def mix(self, state, weight:float):
+
+    async def mix(self, state, weight: float):
         staot0 = await self.copy()
-        
-        staot0.state = staot0.state * (1-weight) + state.state * weight
-        staot0.logits = staot0.logits * (1-weight) + state.logits * weight
+
+        staot0.state = staot0.state * (1 - weight) + state.state * weight
+        staot0.logits = staot0.logits * (1 - weight) + state.logits * weight
 
         return staot0
-    
+
     @run_in_async_thread
-    def mix_inplace(self, state, weight:float):        
-        self.state = self.state * (1-weight) + state.state * weight
-        self.logits = self.logits * (1-weight) + state.logits * weight
+    def mix_inplace(self, state, weight: float):
+        self.state = self.state * (1 - weight) + state.state * weight
+        self.logits = self.logits * (1 - weight) + state.logits * weight
 
         return self
+
 
 state_cache: Dict[str, RWKVState] = {}
 
@@ -452,14 +453,13 @@ class RWKVChater(RWKVChaterEmbryo):
         if message != "+":
             new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
             await self.process_tokens(tokenizer.encode(new))
-        
 
         answer = await self.gen_future(end_of="\n\n")
-        await self.state.mix_inplace(state_cache[self.default_state],0.07)
+        await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
-        
+
         return answer
 
 
@@ -481,7 +481,7 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         self.message_cache.clear()
 
         answer = await self.gen_future(end_of="\n\n")
-        await self.state.mix_inplace(state_cache[self.default_state],0.07)
+        await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
         answer = answer.replace(bot, nickname).strip()
 
@@ -555,4 +555,3 @@ print(tokenizer.decode(RWKVChaterEmbryo.gen_prompt(None,[
     
 ],time_limit=3600,ctx_limit=1)))
 # """
-
