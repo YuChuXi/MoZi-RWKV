@@ -453,9 +453,9 @@ class RWKVChater(RWKVChaterEmbryo):
             new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
             await self.process_tokens(tokenizer.encode(new))
         
-        await self.state.mix_inplace(state_cache[self.default_state],0.07)
 
         answer = await self.gen_future(end_of="\n\n")
+        await self.state.mix_inplace(state_cache[self.default_state],0.07)
 
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
@@ -479,9 +479,9 @@ class RWKVGroupChater(RWKVChaterEmbryo):
     ) -> str:
         await self.process_tokens(await self.gen_prompt(self.message_cache))
         self.message_cache.clear()
-        await self.state.mix_inplace(state_cache[self.default_state],0.07)
 
         answer = await self.gen_future(end_of="\n\n")
+        await self.state.mix_inplace(state_cache[self.default_state],0.07)
 
         answer = answer.replace(bot, nickname).strip()
 
