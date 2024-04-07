@@ -44,7 +44,7 @@ PRPEAT_PENALTY: float = 1.05
 # a?
 PENALTY_MITIGATE: float = 1.02
 #
-OBSTINATE: float = 0.07
+OBSTINATE: float = 0.1
 
 # END_OF_LINE_TOKEN: int = 187
 # DOUBLE_END_OF_LINE_TOKEN: int = 535
@@ -191,7 +191,7 @@ class RWKVEmbryo:
     async def load_state(
         self, state_name: str, prompt: str = None, reprompt=False, q: bool = False
     ):
-        self.mlog.write(f" : Load[{state_name}]\n\n".encode("utf-8"))
+        self.mlog.write(f"\n\n : Load[{state_name}]".encode("utf-8"))
 
         if (prompt is not None) and (
             reprompt
@@ -354,10 +354,11 @@ class RWKVEmbryo:
                 token: int = sampling.sample_logits(
                     logits, self.temperature, self.top_p
                 )
-                await self.process_token(token)
                 answer += tokenizer.decodeBytes([token])
                 if end in answer:
                     break
+                await self.process_token(token)
+
             self.need_save = True
         return answer.decode("utf-8").strip()
 
@@ -409,7 +410,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         """
         now_time = time.time()
         tokens_list = [
-            tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n")
+            tokenizer.encode(f"\n\n{m[0]}{separator} {m[1]}")
             for m in message_list
             if now_time - m[2] <= time_limit
         ]
@@ -455,7 +456,7 @@ class RWKVChater(RWKVChaterEmbryo):
         message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
 
         if message != "+":
-            new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
+            new = f"\n\n{chatuser}{separator} {message}\n\n{nickname}{separator}"
             await self.process_tokens(tokenizer.encode(new))
 
         answer = await self.gen_future(end_of="\n\n")
@@ -532,7 +533,7 @@ class RWKVNicknameGener(RWKVEmbryo):
     async def gen_nickname(self, name):
         self.state.processed_tokens = []
         self.state.processed_tokens_counts = {}
-        new = f"{name}\n"
+        new = f"\n\n{name}\n"
         await self.process_tokens(tokenizer.encode(new))
         answer = await self.gen_future(max_len=10, end_of="\n\n")
 
