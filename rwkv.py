@@ -163,6 +163,10 @@ class RWKVEmbryo:
         )
         check_dir(f"data/{id}")
 
+        assert len(id) > 0
+        assert not state_name is None and len(state_name) > 0
+        assert id != state_name
+
         self.id: str = str(id)
         self.prompt: str = prompt
         self.default_state: str = state_name

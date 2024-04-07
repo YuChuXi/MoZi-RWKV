@@ -279,7 +279,7 @@ W墨： 新来的？小心晚上的怪物！魔王城就在附近！
 
 夏次依锭： 不了吧，我好饿。"""
 
-#print(requests.post("http://localhost:8088/chat",data = {"message":p,"id":"-i6trfghji87tf","user":"夏次依锭"}).json()["message"])
+# print(requests.post("http://localhost:8088/chat",data = {"message":p,"id":"-i6trfghji87tf","user":"夏次依锭"}).json()["message"])
 
 # time.sleep(100)
 while True:
