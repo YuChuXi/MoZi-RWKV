@@ -163,9 +163,9 @@ class RWKVEmbryo:
         )
         check_dir(f"data/{id}")
 
-        assert len(id) > 0
-        assert not state_name is None and len(state_name) > 0
-        assert id != state_name
+        assert len(id) > 0, "ID must not be empty"
+        assert not state_name is None and len(state_name) > 0, "State must not be empty"
+        assert id != state_name, "ID != State !!!"
 
         self.id: str = str(id)
         self.prompt: str = prompt
@@ -360,7 +360,7 @@ class RWKVEmbryo:
                 await self.process_token(token)
 
             self.need_save = True
-        return answer.decode("utf-8").strip()
+        return answer.decode("utf-8", errors="ignore").strip()
 
     async def call(self, api: str, kwargs: Dict[str, object]):
         return await getattr(self, api)(**kwargs)
@@ -387,7 +387,8 @@ with open(prompt_config, "r", encoding="utf-8") as json_file:
     )
     if check_file(default_init_prompt):
         with open(default_init_prompt, "rb") as f:
-            default_init_prompt = f.read().decode("utf-8")
+            default_init_prompt = f.read().decode("utf-8", errors="ignore")
+    default_init_prompt = default_init_prompt.strip()
 assert default_init_prompt != "", "Prompt must not be empty"
 
 
