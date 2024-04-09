@@ -4,7 +4,7 @@ from quart import Quart, websocket, request
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 import asyncio
-from rwkv import RWKVChater, RWKVNicknameGener, RWKVGroupChater, process_default_state, model_state_name
+from rwkv import RWKVChater, RWKVNicknameGener, RWKVGroupChater, process_default_state, MODEL_STATE_NAME
 from app_util import prxxx, gen_echo, clean_symbols
 from typing import Dict
 
@@ -60,7 +60,7 @@ async def chat(
     id: str = "-b2bi0JgEhJru87HTcRjh9vdT",
     user: str = "木子",
     nickname: str = "墨子",
-    state: str = model_state_name,
+    state: str = MODEL_STATE_NAME,
 ) -> str:
     id = clean_symbols(id)
     echo = gen_echo()
@@ -85,7 +85,7 @@ async def group_chat_send(
     message: str,
     id: str = "-b2bi0JgEhJru87HTcRjh9vdT",
     user: str = "木子",
-    state: str = model_state_name,
+    state: str = MODEL_STATE_NAME,
 ) -> str:
     id = clean_symbols(id)
 
@@ -106,7 +106,7 @@ async def group_chat_send(
 async def group_chat_get(
     id: str = "-b2bi0JgEhJru87HTcRjh9vdT",
     nickname: str = "墨子",
-    state: str = model_state_name,
+    state: str = MODEL_STATE_NAME,
 ) -> str:
     id = clean_symbols(id)
 

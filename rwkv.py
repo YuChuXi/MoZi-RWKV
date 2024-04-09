@@ -27,53 +27,30 @@ from app_util import (
     run_in_async_thread,
 )
 
+from config import (
+    MAX_GENERATION_LENGTH,
+TEMPERATURE,
+TOP_P,
+PRESENCE_PENALTY,
+FREQUENCY_PENALTY,
+PRPEAT_PENALTY,
+PENALTY_MITIGATE,
+OBSTINATE,
+END_OF_TEXT_TOKEN,
+THREADS,
+MODEL_PATH,
+MODEL_STATE_NAME,
+MODEL_STATE_PATH,
+TONKEIZER_DICT
+)
 # ======================================== Script settings ========================================
-
-MAX_GENERATION_LENGTH: int = 128
-
-# Sampling temperature. It could be a good idea to increase temperature when top_p is low.
-TEMPERATURE: float = 1.0
-# For better Q&A accuracy and less diversity, reduce top_p (to 0.5, 0.2, 0.1 etc.)
-TOP_P: float = 0.5
-# Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
-PRESENCE_PENALTY: float = 0.7
-# Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
-FREQUENCY_PENALTY: float = 1.0
-# When the model repeats several words, the penalty will increase sharply and pull the model back, set it to 1.0-1.2 is a good idea.
-PRPEAT_PENALTY: float = 1.05
-# a?
-PENALTY_MITIGATE: float = 1.02
-#
-OBSTINATE: float = 0.1
-
-# END_OF_LINE_TOKEN: int = 187
-# DOUBLE_END_OF_LINE_TOKEN: int = 535
-END_OF_TEXT_TOKEN: int = 0
-
-THREADS: int = 3
-
-
-np.random.seed(int(time.time() * 1e6 % 2**30))
-
-model_name = "RWKV-5-Qun-1B5-Q4_0"
-model_name = "RWKV-5-World-3B-Q5_0-v2"
-model_name = "RWKV-5-World-7B-Q5_1-v2"
-model_name = "RWKV-6-World-1B6-Q5_1-v2v1"
-model_name = "RWKV-5-World-1B5-Q5_1-v2"
-
-model_path = f"model/{model_name}.bin"
-
-model_state_name = "default.state"
-model_state_path = f"data/{model_state_name}.pkl"
-
-tokenizer_dict = "rwkv_cpp/rwkv_vocab_v20230424.txt"
 
 
 library = rwkv_cpp_shared_library.load_rwkv_shared_library()
 prxxx(f"System info: {library.rwkv_get_system_info_string()}")
 # '''
-prxxx(f"Loading RWKV model   file: {model_path}")
-model = rwkv_cpp_model.RWKVModel(library, model_path, thread_count=THREADS)
+prxxx(f"Loading RWKV model   file: {MODEL_PATH}")
+model = rwkv_cpp_model.RWKVModel(library, MODEL_PATH, thread_count=THREADS)
 # '''
 check_dir("data")
 if check_file(f"data/tokenizer.pkl"):
@@ -81,8 +58,8 @@ if check_file(f"data/tokenizer.pkl"):
     with open(f"data/tokenizer.pkl", "rb") as f:
         tokenizer: RWKV_TOKENIZER = pickle.load(f)
 else:
-    prxxx(f"Loading tokenizer   file: {tokenizer_dict}")
-    tokenizer: RWKV_TOKENIZER = RWKV_TOKENIZER(tokenizer_dict)
+    prxxx(f"Loading tokenizer   file: {TONKEIZER_DICT}")
+    tokenizer: RWKV_TOKENIZER = RWKV_TOKENIZER(TONKEIZER_DICT)
     with open(f"data/tokenizer.pkl", "wb") as f:
         pickle.dump(tokenizer, f)
 
@@ -157,7 +134,7 @@ state_cache: Dict[str, RWKVState] = {}
 
 
 class RWKVEmbryo:
-    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+    def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
         prxxx(
             f"Init RWKV   id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
         )
@@ -206,7 +183,7 @@ class RWKVEmbryo:
             await self.save_state(self.default_state, must=True, q=q)
             return
 
-        state_names = [self.default_state, model_state_name]
+        state_names = [self.default_state, MODEL_STATE_NAME]
         if state_name is not None:
             state_names = [state_name] + state_names
 
@@ -394,7 +371,7 @@ assert default_init_prompt != "", "Prompt must not be empty"
 
 # =================================================================================================
 class RWKVChaterEmbryo(RWKVEmbryo):
-    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+    def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
         super().__init__(id, state_name, prompt)
 
     async def gen_prompt(
@@ -430,7 +407,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
 
 
 class RWKVChater(RWKVChaterEmbryo):
-    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+    def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
         super().__init__(id, state_name, prompt)
 
     async def chat(
@@ -470,7 +447,7 @@ class RWKVChater(RWKVChaterEmbryo):
 
 
 class RWKVGroupChater(RWKVChaterEmbryo):
-    def __init__(self, id: str, state_name: str = model_state_name, prompt: str = None):
+    def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
         super().__init__(id, state_name, prompt)
         self.message_cache: List[List[object]] = []
 
@@ -543,11 +520,11 @@ class RWKVNicknameGener(RWKVEmbryo):
 
 
 async def process_default_state():
-    if await check_file_async(f"data/{model_state_name}/tokens.pkl"):
+    if await check_file_async(f"data/{MODEL_STATE_NAME}/tokens.pkl"):
         prxxx("Default state was processed")
     else:
         await RWKVChater(
-            id="chat-model", state_name=model_state_name, prompt=default_init_prompt
+            id="chat-model", state_name=MODEL_STATE_NAME, prompt=default_init_prompt
         ).init_state()
 
 

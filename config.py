@@ -28,15 +28,15 @@ THREADS: int = 3
 
 np.random.seed(int(time.time() * 1e6 % 2**30))
 
-model_name = "RWKV-5-Qun-1B5-Q4_0"
-model_name = "RWKV-5-World-3B-Q5_0-v2"
-model_name = "RWKV-5-World-7B-Q5_1-v2"
-model_name = "RWKV-6-World-1B6-Q5_1-v2v1"
-model_name = "RWKV-5-World-1B5-Q5_1-v2"
+MODEL_NAME = "RWKV-5-Qun-1B5-Q4_0"
+MODEL_NAME = "RWKV-5-World-3B-Q5_0-v2"
+MODEL_NAME = "RWKV-5-World-7B-Q5_1-v2"
+MODEL_NAME = "RWKV-6-World-1B6-Q5_1-v2v1"
+MODEL_NAME = "RWKV-5-World-1B5-Q5_1-v2"
 
-model_path = f"model/{model_name}.bin"
+MODEL_PATH = f"model/{MODEL_NAME}.bin"
 
-model_state_name = "default.state"
-model_state_path = f"data/{model_state_name}.pkl"
+MODEL_STATE_NAME = "default.state"
+MODEL_STATE_PATH = f"data/{MODEL_STATE_NAME}.pkl"
 
-tokenizer_dict = "rwkv_cpp/rwkv_vocab_v20230424.txt"
+TONKEIZER_DICT = "rwkv_cpp/rwkv_vocab_v20230424.txt"
