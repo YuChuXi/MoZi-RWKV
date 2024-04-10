@@ -363,7 +363,7 @@ class RWKVEmbryo:
 
 prompt_config = f"prompt/{CHAT_LANGUAGE}-{CHAT_PROMPT_TYPE}.json"
 prxxx(f"Loading RWKV prompt   config: {prompt_config}")
-with open(prompt_config, "r", encoding="utf-8") as json_file:
+with open(prompt_config, "r", encoding="utf-8", errors="ignore") as json_file:
     prompt_data = json.load(json_file)
     user, bot, separator, default_init_prompt = (
         prompt_data["user"],
@@ -372,8 +372,8 @@ with open(prompt_config, "r", encoding="utf-8") as json_file:
         prompt_data["prompt"],
     )
     if check_file(default_init_prompt):
-        with open(default_init_prompt, "rb") as f:
-            default_init_prompt = f.read().decode("utf-8", errors="ignore")
+        with open(default_init_prompt, "r", encoding="utf-8", errors="ignore") as f:
+            default_init_prompt = f.read()
 assert default_init_prompt != "", "Prompt must not be empty"
 
 
@@ -466,6 +466,21 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         self.message_cache: List[List[object]] = []
 
     async def send_message(self, message: str, chatuser: str = user) -> None:
+        if "-temp=" in message:
+            temperature = float(message.split("-temp=")[1].split(" ")[0])
+            message = message.replace("-temp=" + f"{temperature:g}", "")
+            self.temperature = max(0.2, min(temperature, 5.0))
+
+        if "-top_p=" in message:
+            top_p = float(message.split("-top_p=")[1].split(" ")[0])
+            message = message.replace("-top_p=" + f"{top_p:g}", "")
+            self.top_p = max(0.2, min(top_p, 5.0))
+
+        if "+reset" in message:
+            await self.reset_state()
+            self.message_cache.clear()
+            return
+    
         self.message_cache.append([chatuser, message, time.time()])
         if len(self.message_cache) > 128:
             self.message_cache = self.message_cache[64]
