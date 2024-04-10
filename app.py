@@ -318,7 +318,7 @@ async def after_serving():
 async def main():
     await before_serving()  # fix: timeout wen shutup
     config = Config()
-    config.bind = ["0.0.0.0:8088"]
+    config.bind = APP_BIND
     config.use_reloader = True
     config.loglevel = "debug"
     """
