@@ -465,6 +465,10 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         super().__init__(id, state_name, prompt)
         self.message_cache: List[List[object]] = []
 
+    def reset_state(self, q: bool = False):
+        self.message_cache.clear()
+        return super().reset_state(q)
+
     async def send_message(self, message: str, chatuser: str = user) -> None:
         if "-temp=" in message:
             temperature = float(message.split("-temp=")[1].split(" ")[0])
@@ -478,7 +482,6 @@ class RWKVGroupChater(RWKVChaterEmbryo):
 
         if "+reset" in message:
             await self.reset_state()
-            self.message_cache.clear()
             return
     
         self.message_cache.append([chatuser, message, time.time()])
