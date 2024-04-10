@@ -220,9 +220,10 @@ class RWKVEmbryo:
     async def save_state(self, state_name: str, must: bool = False, q: bool = False):
         if self.need_save or must:
             await self.state.save(state_name)
-            self.mlog.flush()
             prxxx(f"Save state   name: {state_name}", q=q)
             self.need_save = False
+        self.mlog.flush()
+
 
     @log_call
     async def reset_state(self, q: bool = False):
@@ -347,9 +348,9 @@ class RWKVEmbryo:
                     logits, self.temperature, self.top_p
                 )
                 answer += tokenizer.decodeBytes([token])
+                await self.process_token(token)
                 if end in answer:
                     break
-                await self.process_token(token)
 
             self.need_save = True
         return answer.decode("utf-8", errors="ignore").strip()
@@ -373,7 +374,6 @@ with open(prompt_config, "r", encoding="utf-8") as json_file:
     if check_file(default_init_prompt):
         with open(default_init_prompt, "rb") as f:
             default_init_prompt = f.read().decode("utf-8", errors="ignore")
-    default_init_prompt = default_init_prompt.strip()
 assert default_init_prompt != "", "Prompt must not be empty"
 
 
@@ -395,11 +395,11 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         """
         now_time = time.time()
         tokens_list = [
-            tokenizer.encode(f"\n\n{m[0]}{separator} {m[1]}")
+            tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n")
             for m in message_list
             if now_time - m[2] <= time_limit
         ]
-        tokens_list.append(tokenizer.encode(f"{bot}{separator} "))
+        tokens_list.append(tokenizer.encode(f"{bot}{separator}"))
 
         prompt = []
         for tl in tokens_list[::-1]:
@@ -444,11 +444,11 @@ class RWKVChater(RWKVChaterEmbryo):
         message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
 
         if message != "+":
-            new = f"\n\n{chatuser}{separator} {message}\n\n{nickname}{separator}"
+            new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
             await self.process_tokens(tokenizer.encode(new))
 
         answer = await self.gen_future(end_of="\n\n")
-        await self.state.mix_max_inplace(state_cache[self.default_state], OBSTINATE)
+        await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
         #await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
         answer = answer.replace(user, chatuser)
@@ -503,7 +503,7 @@ class RWKVNicknameGener(RWKVEmbryo):
     async def gen_nickname(self, name):
         self.state.processed_tokens = []
         self.state.processed_tokens_counts = {}
-        new = f"\n\n{name}\n"
+        new = f"{name}\n"
         await self.process_tokens(tokenizer.encode(new))
         answer = await self.gen_future(max_len=10, end_of="\n\n")
 

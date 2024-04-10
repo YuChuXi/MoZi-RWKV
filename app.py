@@ -199,6 +199,16 @@ async def R_reset_state():
     return {"state": "ok" if flag else "a?"}
 
 
+@app.route("/save_state", methods=["GET"])
+async def R_save_state():
+    if request.method == "GET":
+        kwargs = request.args
+    elif request.method == "POST":
+        kwargs = await request.form
+    flag = await save_chaters_state(**kwargs)
+    return {"state": "ok"}
+
+
 @app.route("/restart", methods=["GET"])
 async def R_restart():
     if request.args["passwd_gkd"] == "ihAVEcODE":

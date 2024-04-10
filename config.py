@@ -22,7 +22,7 @@ OBSTINATE: float = 0.1
 MAX_GENERATION_LENGTH: int = 128
 END_OF_TEXT_TOKEN: int = 0
 
-THREADS: int = 3
+THREADS: int = 4
 
 MODEL_NAME: str = "RWKV-5-Qun-1B5-Q4_0"
 MODEL_NAME: str = "RWKV-5-World-3B-Q5_0-v2"
@@ -76,4 +76,6 @@ NICKGENER_PROMPT: str = """注:
 
 猫猫博士凌枫
 猫猫博士
+
+
 """
