@@ -11,6 +11,7 @@ import time
 import numpy as np
 import sampling
 import asyncio
+import copy
 from rwkv_cpp import rwkv_cpp_shared_library, rwkv_cpp_model
 from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
 
@@ -29,29 +30,29 @@ from app_util import (
 
 from config import (
     MAX_GENERATION_LENGTH,
-TEMPERATURE,
-TOP_P,
-PRESENCE_PENALTY,
-FREQUENCY_PENALTY,
-PRPEAT_PENALTY,
-PENALTY_MITIGATE,
-OBSTINATE,
-END_OF_TEXT_TOKEN,
-THREADS,
-MODEL_PATH,
-MODEL_STATE_NAME,
-MODEL_STATE_PATH,
-TONKEIZER_DICT
+    TEMPERATURE,
+    TOP_P,
+    PRESENCE_PENALTY,
+    FREQUENCY_PENALTY,
+    PRPEAT_PENALTY,
+    PENALTY_MITIGATE,
+    OBSTINATE,
+    END_OF_TEXT_TOKEN,
+    THREADS,
+    MODEL_NAME,
+    MODEL_STATE_NAME,
+    TONKEIZER_DICT,
+    CHAT_LANGUAGE,
+    CHAT_PROMPT_TYPE,
+    NICKGENER_PROMPT,
 )
-# ======================================== Script settings ========================================
-
 
 library = rwkv_cpp_shared_library.load_rwkv_shared_library()
 prxxx(f"System info: {library.rwkv_get_system_info_string()}")
-# '''
-prxxx(f"Loading RWKV model   file: {MODEL_PATH}")
-model = rwkv_cpp_model.RWKVModel(library, MODEL_PATH, thread_count=THREADS)
-# '''
+prxxx(f"Loading RWKV model   file: model/{MODEL_NAME}.bin")
+model = rwkv_cpp_model.RWKVModel(
+    library, f"model/{MODEL_NAME}.bin", thread_count=THREADS
+)
 check_dir("data")
 if check_file(f"data/tokenizer.pkl"):
     prxxx(f"Loading tokenizer   file: data/tokenizer.pkl")
@@ -62,6 +63,7 @@ else:
     tokenizer: RWKV_TOKENIZER = RWKV_TOKENIZER(TONKEIZER_DICT)
     with open(f"data/tokenizer.pkl", "wb") as f:
         pickle.dump(tokenizer, f)
+
 
 # ========================================= Embryo states =========================================
 
@@ -107,10 +109,7 @@ class RWKVState:
 
     @run_in_async_thread
     def copy(self):
-        new_state = RWKVState()
-        for k in self.data:
-            new_state.__dict__[k] = self.__dict__[k].copy()
-        return new_state
+        return copy.deepcopy(self)
 
     async def mix(self, state, weight: float):
         staot0 = await self.copy()
@@ -127,8 +126,24 @@ class RWKVState:
 
         return self
 
+    async def mix_max(self, state, weight: float):
+        staot0 = await self.copy()
+
+        staot0.state = np.maximum(staot0.state, state.state)
+        staot0.logits = np.maximum(staot0.logits, state.logits)
+
+        return staot0
+
+    @run_in_async_thread
+    def mix_max_inplace(self, state, weight: float):
+        self.state = np.maximum(self.state, state.state)
+        self.logits = np.maximum(self.logits, state.logits)
+
+        return self
+
 
 state_cache: Dict[str, RWKVState] = {}
+
 
 # ============================================ Embryo =============================================
 
@@ -343,16 +358,9 @@ class RWKVEmbryo:
         return await getattr(self, api)(**kwargs)
 
 
-# ========================================= Chat settings =========================================
+# ======================================== Chater Embryo ==========================================
 
-# English, Chinese, Japanese
-language: str = "Chinese"
-# QA: Question and Answer prompt to talk to an AI assistant.
-# Chat: chat prompt (need a large model for adequate quality, 7B+).
-prompt_type: str = "Chat-MoZi-N"
-
-
-prompt_config = f"prompt/{language}-{prompt_type}.json"
+prompt_config = f"prompt/{CHAT_LANGUAGE}-{CHAT_PROMPT_TYPE}.json"
 prxxx(f"Loading RWKV prompt   config: {prompt_config}")
 with open(prompt_config, "r", encoding="utf-8") as json_file:
     prompt_data = json.load(json_file)
@@ -369,7 +377,6 @@ with open(prompt_config, "r", encoding="utf-8") as json_file:
 assert default_init_prompt != "", "Prompt must not be empty"
 
 
-# =================================================================================================
 class RWKVChaterEmbryo(RWKVEmbryo):
     def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
         super().__init__(id, state_name, prompt)
@@ -406,6 +413,9 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         return prompt
 
 
+# ============================================ Chater =============================================
+
+
 class RWKVChater(RWKVChaterEmbryo):
     def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
         super().__init__(id, state_name, prompt)
@@ -438,12 +448,16 @@ class RWKVChater(RWKVChaterEmbryo):
             await self.process_tokens(tokenizer.encode(new))
 
         answer = await self.gen_future(end_of="\n\n")
-        await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
+        await self.state.mix_max_inplace(state_cache[self.default_state], OBSTINATE)
+        #await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
 
         return answer
+
+
+# ========================================= Group Chater ==========================================
 
 
 class RWKVGroupChater(RWKVChaterEmbryo):
@@ -471,36 +485,14 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         return answer
 
 
-# ======================================== Gener settings =========================================
-prompt = """注: 
-以下是一张用户名与称呼的对照表，称呼是用户名中最具有特色的部分, 且尽可能短. 
-
-玉子是个废物喵
-玉子
-
-沐沐
-沐沐
-
-墨子不是猫
-墨子
-
-不想加班的朋朋
-朋朋
-
-只有鱼骨头吃的喵
-鱼骨头喵
-
-猫猫博士凌枫
-猫猫博士
+# ======================================= Nickname Gener ==========================================
 
 
-"""
-
-
-# =================================================================================================
 class RWKVNicknameGener(RWKVEmbryo):
     def __init__(self):
-        super().__init__("-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", prompt)
+        super().__init__(
+            "-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", NICKGENER_PROMPT
+        )
         self.temperature: float = 0.3
         self.top_p: float = 0.1
         self.penalty_mitigate = 0.98
@@ -517,6 +509,9 @@ class RWKVNicknameGener(RWKVEmbryo):
 
         await self.reset_state(q=True)
         return answer
+
+
+# ========================================== Other ================================================
 
 
 async def process_default_state():

@@ -4,14 +4,10 @@ from quart import Quart, websocket, request
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 import asyncio
-from rwkv import RWKVChater, RWKVNicknameGener, RWKVGroupChater, process_default_state, MODEL_STATE_NAME
+from rwkv import RWKVChater, RWKVNicknameGener, RWKVGroupChater, process_default_state
 from app_util import prxxx, gen_echo, clean_symbols
 from typing import Dict
-
-HOST, PORT = ("0.0.0.0", 8088)
-SAVE_TIME = 3600
-
-test_message = """告诉我关于你的一切。"""
+from config import MODEL_STATE_NAME, APP_BIND, APP_AUTOSAVE_TIME, APP_TEST_MESSAGE
 
 with open("help.min.html", "r") as f:
     flask_help = f.read()
@@ -32,7 +28,7 @@ def restart():
 
 
 def stop(signal=None, frame=None):
-    #app.shutdown()
+    # app.shutdown()
     prxxx("### STOP ! ###")
     sys.exit()
 
@@ -50,7 +46,7 @@ async def save_chaters_state():
 
 async def time_to_save():
     while True:
-        for i in range(SAVE_TIME):  # 防止卡服务器关闭
+        for i in range(APP_AUTOSAVE_TIME):  # 防止卡服务器关闭
             await asyncio.sleep(1)
         await save_chaters_state()
 
@@ -126,7 +122,7 @@ async def group_chat_get(
     return answer
 
 
-async def gen_nickname(name:str):
+async def gen_nickname(name: str):
     echo = gen_echo()
     prxxx()
     prxxx(f" #    GenNickname   echo: {echo}")
@@ -141,8 +137,8 @@ async def gen_nickname(name:str):
     return nickname
 
 
-async def reset_state(id:str):
-    id=clean_symbols(id)
+async def reset_state(id: str):
+    id = clean_symbols(id)
     flag = False
     if id in chaters:
         await chaters[id].reset_state()
@@ -289,7 +285,7 @@ async def before_serving():
     await chat(
         **{
             "id": "init",
-            "message": test_message,
+            "message": APP_TEST_MESSAGE,
             "user": "测试者",
         }
     )
@@ -298,7 +294,7 @@ async def before_serving():
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
     prxxx()
     prxxx("Web api server start!\a")
-    prxxx(f"API   HOST: {HOST} | PORT: {PORT}")
+    prxxx(f"API   bind: {APP_BIND}")
 
 
 @app.after_serving
