@@ -40,7 +40,7 @@ np.random.seed(int(time.time() * 1e6 % 2**30))
 # ========================================= App settings ==========================================
 
 APP_BIND: List[str] = ["0.0.0.0:8088", "[::]:8089"]
-APP_AUTOSAVE_TIME: int = 3600
+APP_AUTOSAVE_TIME: int = 600
 
 APP_TEST_MESSAGE: str = """告诉我关于你的一切。"""
 

@@ -42,7 +42,7 @@ async def save_chaters_state():
     ):
         await asyncio.sleep(0)
         await group_chaters[id].save_state(id, q=True)
-
+    prxxx("Autosave all")
 
 async def time_to_save():
     while True:
