@@ -8,6 +8,7 @@ from rwkv import RWKVChater, RWKVNicknameGener, RWKVGroupChater, process_default
 from app_util import prxxx, gen_echo, clean_symbols
 from typing import Dict
 from config import MODEL_STATE_NAME, APP_BIND, APP_AUTOSAVE_TIME, APP_TEST_MESSAGE
+from show_state import show_state_delta
 
 with open("help.min.html", "r") as f:
     flask_help = f.read()
@@ -43,6 +44,7 @@ async def save_chaters_state():
         await asyncio.sleep(0)
         await group_chaters[id].save_state(id, q=True)
 
+
 def save_chaters_state_sync():
     for id in tqdm.tqdm(chaters, desc="Save chater", leave=False, unit="chr"):
         chaters[id].state.save_sync(id)
@@ -50,6 +52,7 @@ def save_chaters_state_sync():
         group_chaters, desc="Save grpup chater", leave=False, unit="chr"
     ):
         group_chaters[id].state.save_sync(id)
+
 
 async def time_to_save():
     while True:
@@ -65,6 +68,7 @@ async def chat(
     user: str = "木子",
     nickname: str = "墨子",
     state: str = MODEL_STATE_NAME,
+    debug=False,
 ) -> str:
     id = clean_symbols(id)
     echo = gen_echo()
@@ -75,7 +79,9 @@ async def chat(
 
     prxxx(f" #    Chat   id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -->[{message}]-{echo}")
-    answer = await chaters[id].chat(message=message, chatuser=user, nickname=nickname)
+    answer = await chaters[id].chat(
+        message=message, chatuser=user, nickname=nickname, debug=debug
+    )
     prxxx(f" #    Chat   id: {id} | nickname: {nickname} | echo: {echo}")
     prxxx(f" #  {echo}-[{answer}]<--")
 
@@ -250,6 +256,7 @@ async def W_chat():
             nickname*
             default_state*
             echo*
+            debug*
         }
         """
         answer = await chat(**data)
@@ -296,10 +303,11 @@ async def before_serving():
     # app.add_background_task(time_to_save)
     await process_default_state()
     await nicknameGener.init_state()
-    chaters["init"] = RWKVChater("init")
-    await chaters["init"].init_state()
-    prxxx(f"State size: {chaters['init'].state.state.size}")
-    await chaters["init"].reset_state()
+    init = RWKVChater("init")
+    chaters["init"] = init
+    await init.init_state()
+    prxxx(f"State size: {init.state.state.size}")
+    await init.reset_state()
     await chat(
         **{
             "id": "init",
@@ -307,7 +315,6 @@ async def before_serving():
             "user": "测试者",
         }
     )
-
     prxxx()
     prxxx(" *#*   RWKV！高性能ですから!   *#*")
     prxxx()

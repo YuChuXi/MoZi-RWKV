@@ -156,7 +156,6 @@ class RWKVState:
         return self
 
 
-
 state_cache: Dict[str, RWKVState] = {}
 
 
@@ -238,7 +237,6 @@ class RWKVEmbryo:
             prxxx(f"Save state   name: {state_name}", q=q)
             self.need_save = False
         self.mlog.flush()
-
 
     @log_call
     async def reset_state(self, q: bool = False):
@@ -440,6 +438,7 @@ class RWKVChater(RWKVChaterEmbryo):
         message: str,
         chatuser: str = user,
         nickname: str = bot,
+        debug: bool = False,
     ):
         if "-temp=" in message:
             temperature = float(message.split("-temp=")[1].split(" ")[0])
@@ -458,13 +457,23 @@ class RWKVChater(RWKVChaterEmbryo):
         message = message.replace(chatuser, user)
         message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
 
-        if message != "+":
-            new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
-            await self.process_tokens(tokenizer.encode(new))
+        if debug:
+            from show_state import show_state_delta
 
-        answer = await self.gen_future(end_of="\n\n")
+            with show_state_delta(self.state):
+                if message != "+":
+                    new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
+                    await self.process_tokens(tokenizer.encode(new))
+
+                answer = await self.gen_future(end_of="\n\n")
+        else:
+            if message != "+":
+                new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
+                await self.process_tokens(tokenizer.encode(new))
+
+            answer = await self.gen_future(end_of="\n\n")
         await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
-        #await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
+        # await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
         answer = answer.replace(user, chatuser)
         answer = answer.replace(bot, nickname).strip()
@@ -498,7 +507,7 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         if "+reset" in message:
             await self.reset_state()
             return
-    
+
         self.message_cache.append([chatuser, message, time.time()])
         if len(self.message_cache) > 128:
             self.message_cache = self.message_cache[64]
