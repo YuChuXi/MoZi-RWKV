@@ -42,13 +42,21 @@ async def save_chaters_state():
     ):
         await asyncio.sleep(0)
         await group_chaters[id].save_state(id, q=True)
-    prxxx("Autosave all")
+
+def save_chaters_state_sync():
+    for id in tqdm.tqdm(chaters, desc="Save chater", leave=False, unit="chr"):
+        chaters[id].state.save_sync(id)
+    for id in tqdm.tqdm(
+        group_chaters, desc="Save grpup chater", leave=False, unit="chr"
+    ):
+        group_chaters[id].state.save_sync(id)
 
 async def time_to_save():
     while True:
         for i in range(APP_AUTOSAVE_TIME):  # 防止卡服务器关闭
             await asyncio.sleep(1)
         await save_chaters_state()
+        prxxx("Autosave all chater")
 
 
 async def chat(
@@ -309,7 +317,7 @@ async def before_serving():
 
 @app.after_serving
 async def after_serving():
-    await save_chaters_state()
+    save_chaters_state_sync()
     global chaters, group_chaters
     del chaters, group_chaters
     prxxx("### STOP ! ###")

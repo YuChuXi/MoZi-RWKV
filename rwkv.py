@@ -92,6 +92,20 @@ class RWKVState:
         np.save(f"data/{state_name}/state.npy", self.state)
         return self
 
+    def save_sync(self, state_name: str):
+        check_dir(f"data/{state_name}")
+        with open(f"data/{state_name}/tokens.pkl", "wb") as f:
+            pickle.dump(
+                {
+                    "processed_tokens": self.processed_tokens,
+                    "logits": self.logits,
+                    "processed_tokens_counts": self.processed_tokens_counts,
+                },
+                f,
+            )
+        np.save(f"data/{state_name}/state.npy", self.state)
+        return self
+
     @run_in_async_thread
     def load(self, state_name: str):
         if not check_file(f"data/{state_name}/tokens.pkl"):
@@ -140,6 +154,7 @@ class RWKVState:
         self.logits = np.maximum(self.logits, state.logits)
 
         return self
+
 
 
 state_cache: Dict[str, RWKVState] = {}
