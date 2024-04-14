@@ -12,6 +12,7 @@ import numpy as np
 import sampling
 import asyncio
 import copy
+import re
 from rwkv_cpp import rwkv_cpp_shared_library, rwkv_cpp_model
 from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
 
@@ -159,27 +160,84 @@ class RWKVState:
 state_cache: Dict[str, RWKVState] = {}
 
 
+# ========================================= Embryo prompt =========================================
+
+
+class RWKVPrompt:
+    def __init__(
+        self,
+        string: str = None,
+        file: str = None,
+        language: str = CHAT_LANGUAGE,
+        type: str = CHAT_PROMPT_TYPE,
+    ) -> None:
+        if not string is None:
+            prxxx(f"Loading RWKV prompt   string: {self.get_preview(string)}")
+            self.prompt = string
+            self.user = None
+            self.bot = None
+            self.separator = None
+            self.ignore = None
+        else:
+            prompt_config = f"prompt/{language}-{type}.json"
+            if not file is None:
+                prompt_config = file
+            prxxx(f"Loading RWKV prompt   config: {prompt_config}")
+            with open(
+                prompt_config, "r", encoding="utf-8", errors="ignore"
+            ) as json_file:
+                prompt_data: Dict[str, str] = json.load(json_file)
+                self.user = prompt_data.get("user", "<|user|>")
+                self.bot = prompt_data.get("bot", "<|me|>")
+                self.separator = prompt_data.get("separator", ":")
+                self.prompt = prompt_data.get("prompt", "")
+                self.ignore = prompt_data.get("ignore", "")
+                if check_file(self.prompt):
+                    with open(self.prompt, "r", encoding="utf-8", errors="ignore") as f:
+                        self.prompt = f.read()
+            assert self.prompt != "", "Prompt must not be empty"
+
+    def __str__(self):
+        return "None" if self.prompt is None else self.get_preview(self.prompt)
+
+    def get_preview(self, string):
+        string = string.strip().replace("\n","\\n")
+        return string[:min(16,len(string))]
+
+    def process_ignore(self, string):
+        if self.ignore is None or self.ignore == "":
+            return string
+        if isinstance(self.ignore, str):
+            self.ignore = re.compile(self.ignore)
+        return self.ignore.sub("", string)
+
+
 # ============================================ Embryo =============================================
+
+DEFAULT_PROMPT = RWKVPrompt()
 
 
 class RWKVEmbryo:
-    def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
-        prxxx(
-            f"Init RWKV   id: {id} | state: {state_name} | prompt: {'None' if prompt is None else prompt.strip().splitlines()[0]}"
-        )
+    def __init__(
+        self,
+        id: str,
+        state_name: str = MODEL_STATE_NAME,
+        prompt: str | RWKVPrompt = DEFAULT_PROMPT,
+    ):
         check_dir(f"data/{id}")
-
         assert len(id) > 0, "ID must not be empty"
         assert not state_name is None and len(state_name) > 0, "State must not be empty"
         assert id != state_name, "ID != State !!!"
 
         self.id: str = str(id)
-        self.prompt: str = prompt
+        self.prompt: RWKVPrompt = (
+            RWKVPrompt(prompt) if isinstance(prompt, str) else prompt
+        )
         self.default_state: str = state_name
-        self.process_lock = asyncio.Lock()
 
-        self.state = RWKVState()
-        self.need_save = False
+        self.state: RWKVState = RWKVState()
+        self.state_lock: asyncio.Lock = asyncio.Lock()
+        self.need_save: bool = False
 
         self.presence_penalty: float = PRESENCE_PENALTY
         self.frequency_penalty: float = FREQUENCY_PENALTY
@@ -188,22 +246,28 @@ class RWKVEmbryo:
         self.temperature: float = TEMPERATURE
         self.top_p: float = TOP_P
 
+        self.have_interrupt: bool = False
+
         self.mlog = open(f"data/{self.id}/model.log", "ab+")
+        prxxx(f"Init RWKV   id: {id} | state: {state_name} | prompt: {prompt}")
 
     def __del__(self):
         self.mlog.close()
 
     @log_call
     async def load_state(
-        self, state_name: str, prompt: str = None, reprompt=False, q: bool = False
+        self,
+        state_name: str,
+        prompt: RWKVPrompt = DEFAULT_PROMPT,
+        reprompt=False,
+        q: bool = False,
     ):
         self.mlog.write(f"\n\n : Load[{state_name}]".encode("utf-8"))
-
         if (prompt is not None) and (
             reprompt
             or (not await check_file_async(f"data/{self.default_state}/tokens.pkl"))
         ):
-            prompt_tokens = tokenizer.encode(prompt)
+            prompt_tokens = tokenizer.encode(prompt.prompt)
             prxxx(f"Process prompt tokens   length: {len(prompt_tokens)} tok", q=q)
             ltime = time.time()
             await self.process_tokens(prompt_tokens)
@@ -219,13 +283,16 @@ class RWKVEmbryo:
         for state_name in state_names:
             await asyncio.sleep(0)
             if (state_name != self.id) and (state_name in state_cache):
-                self.state = await state_cache[state_name].copy()
+                async with self.state_lock:
+                    self.state = await state_cache[state_name].copy()
                 prxxx(f"Load state from cache   name: {state_name}", q=q)
             else:
-                if await self.state.load(state_name) is None:
-                    continue
+                async with self.state_lock:
+                    if await self.state.load(state_name) is None:
+                        continue
                 if state_name != self.id:
-                    state_cache[state_name] = await self.state.copy()
+                    async with self.state_lock:
+                        state_cache[state_name] = await self.state.copy()
                     self.need_save = True
                 prxxx(f"Load state   name: {state_name}", q=q)
             break
@@ -233,7 +300,8 @@ class RWKVEmbryo:
     @log_call
     async def save_state(self, state_name: str, must: bool = False, q: bool = False):
         if self.need_save or must:
-            await self.state.save(state_name)
+            async with self.state_lock:
+                await self.state.save(state_name)
             prxxx(f"Save state   name: {state_name}", q=q)
             self.need_save = False
         self.mlog.flush()
@@ -245,6 +313,15 @@ class RWKVEmbryo:
 
     async def init_state(self):
         await self.load_state(self.id, self.prompt)
+
+    def is_busy(self) -> bool:
+        return self.state_lock.locked()
+
+    def interrupt(self):
+        self.have_interrupt = True
+
+    def clean_interrupt(self):
+        self.have_interrupt = False
 
     @log_call
     async def check_state(self):
@@ -308,6 +385,19 @@ class RWKVEmbryo:
         return logits
 
     @log_call
+    async def process_token(self, token: int):
+        await asyncio.sleep(0)
+        self.state.logits, self.state.state = model.eval(
+            token, self.state.state, self.state.state, self.state.logits
+        )
+        await self.process_processed_tokens_counts(token)
+        self.need_save = True
+        await self.check_state()
+
+        self.mlog.write(tokenizer.decodeBytes([token]))
+        return self.state.logits, self.state.state
+
+    @log_call
     async def process_tokens(self, tokens: List[int]):
         """
         self.logits, self.state = model.eval_sequence(
@@ -316,44 +406,38 @@ class RWKVEmbryo:
         #self.logits[END_OF_LINE_TOKEN] += new_line_logit_bias
         """
 
-        for token in tqdm.tqdm(
-            tokens, desc="Processing prompt", leave=False, unit=" tok"
-        ):
-            await asyncio.sleep(0)
-            self.state.logits, self.state.state = model.eval(
-                token, self.state.state, self.state.state, self.state.logits
-            )
-            await self.process_processed_tokens_counts(token)
-            self.need_save = True
-            await self.check_state()
-        self.mlog.write(tokenizer.decodeBytes(tokens))
-        return self.state.logits, self.state.state
+        if self.is_busy():
+            self.interrupt()
 
-    @log_call
-    async def process_token(self, token: int):
-        await asyncio.sleep(0)
-        self.state.logits, self.state.state = model.eval(
-            token, self.state.state, self.state.state, self.state.logits
-        )
-
-        await self.process_processed_tokens_counts(token)
-        self.need_save = True
-        await self.check_state()
-        self.mlog.write(tokenizer.decodeBytes([token]))
+        async with self.state_lock:
+            for token in tqdm.tqdm(
+                tokens, desc="Processing prompt", leave=False, unit=" tok"
+            ):
+                if self.have_interrupt:
+                    self.clean_interrupt()
+                    break
+                await self.process_token(token)
         return self.state.logits, self.state.state
 
     async def gen_future(
         self, max_len: int = MAX_GENERATION_LENGTH, end_of: str = "\n\n"
     ) -> str:
-        async with self.process_lock:
-            answer: bytes = b""
-            end: bytes = end_of.encode("utf-8")
+        answer: bytes = b""
+        end: bytes = end_of.encode("utf-8")
+
+        if self.is_busy():
+            self.interrupt()
+
+        async with self.state_lock:
             for i in tqdm.trange(
                 max_len,
                 desc="Processing future",
                 leave=False,
                 unit=" tok",
             ):
+                if self.have_interrupt:
+                    self.clean_interrupt()
+                    break
                 await asyncio.sleep(0)
                 logits = self.state.logits
                 logits = await self.process_token_penalty(logits)
@@ -365,8 +449,9 @@ class RWKVEmbryo:
                 if end in answer:
                     break
 
-            self.need_save = True
-        return answer.decode("utf-8", errors="ignore").strip()
+        self.need_save = True
+        answer = answer.decode("utf-8", errors="ignore").strip()
+        return self.prompt.process_ignore(answer), answer
 
     async def call(self, api: str, kwargs: Dict[str, object]):
         return await getattr(self, api)(**kwargs)
@@ -374,24 +459,11 @@ class RWKVEmbryo:
 
 # ======================================== Chater Embryo ==========================================
 
-prompt_config = f"prompt/{CHAT_LANGUAGE}-{CHAT_PROMPT_TYPE}.json"
-prxxx(f"Loading RWKV prompt   config: {prompt_config}")
-with open(prompt_config, "r", encoding="utf-8", errors="ignore") as json_file:
-    prompt_data = json.load(json_file)
-    user, bot, separator, default_init_prompt = (
-        prompt_data["user"],
-        prompt_data["bot"],
-        prompt_data["separator"],
-        prompt_data["prompt"],
-    )
-    if check_file(default_init_prompt):
-        with open(default_init_prompt, "r", encoding="utf-8", errors="ignore") as f:
-            default_init_prompt = f.read()
-assert default_init_prompt != "", "Prompt must not be empty"
-
 
 class RWKVChaterEmbryo(RWKVEmbryo):
-    def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
+    def __init__(
+        self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = DEFAULT_PROMPT
+    ):
         super().__init__(id, state_name, prompt)
 
     async def gen_prompt(
@@ -408,11 +480,13 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         """
         now_time = time.time()
         tokens_list = [
-            tokenizer.encode(f"{m[0]}{separator} {m[1]}\n\n")
+            tokenizer.encode(f"{m[0]}{self.prompt.separator} {m[1]}\n\n")
             for m in message_list
             if now_time - m[2] <= time_limit
         ]
-        tokens_list.append(tokenizer.encode(f"{bot}{separator}"))
+        tokens_list.append(
+            tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
+        )
 
         prompt = []
         for tl in tokens_list[::-1]:
@@ -430,16 +504,21 @@ class RWKVChaterEmbryo(RWKVEmbryo):
 
 
 class RWKVChater(RWKVChaterEmbryo):
-    def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
+    def __init__(
+        self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = DEFAULT_PROMPT
+    ):
         super().__init__(id, state_name, prompt)
 
     async def chat(
         self,
         message: str,
-        chatuser: str = user,
-        nickname: str = bot,
+        chatuser: str = None,
+        nickname: str = None,
         debug: bool = False,
     ):
+        chatuser = self.prompt.user if chatuser is None else chatuser
+        nickname = self.prompt.bot if nickname is None else nickname
+
         if "-temp=" in message:
             temperature = float(message.split("-temp=")[1].split(" ")[0])
             message = message.replace("-temp=" + f"{temperature:g}", "")
@@ -454,38 +533,42 @@ class RWKVChater(RWKVChaterEmbryo):
             await self.reset_state()
             return " : Done"
 
-        message = message.replace(chatuser, user)
-        message = message.replace(nickname, bot)  # .strip() # 昵称和提示词不一定一致
+        message = message.replace(chatuser, self.prompt.user)
+        message = message.replace(
+            nickname, self.prompt.bot
+        )  # .strip() # 昵称和提示词不一定一致
 
         if debug:
             from show_state import show_state_delta
 
-            with show_state_delta(self.state):
+            with show_state_delta(model, self.state):
                 if message != "+":
-                    new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
+                    new = f"{chatuser}{self.prompt.separator} {message}\n\n{nickname}{self.prompt.separator}"
                     await self.process_tokens(tokenizer.encode(new))
 
-                answer = await self.gen_future(end_of="\n\n")
+                answer, original = await self.gen_future(end_of="\n\n")
         else:
             if message != "+":
-                new = f"{chatuser}{separator} {message}\n\n{nickname}{separator}"
+                new = f"{chatuser}{self.prompt.separator} {message}\n\n{nickname}{self.prompt.separator}"
                 await self.process_tokens(tokenizer.encode(new))
 
-            answer = await self.gen_future(end_of="\n\n")
+            answer, original = await self.gen_future(end_of="\n\n")
         await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
         # await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
-        answer = answer.replace(user, chatuser)
-        answer = answer.replace(bot, nickname).strip()
+        answer = answer.replace(self.prompt.user, chatuser)
+        answer = answer.replace(self.prompt.bot, nickname).strip()
 
-        return answer
+        return answer, original
 
 
 # ========================================= Group Chater ==========================================
 
 
 class RWKVGroupChater(RWKVChaterEmbryo):
-    def __init__(self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = None):
+    def __init__(
+        self, id: str, state_name: str = MODEL_STATE_NAME, prompt: str = DEFAULT_PROMPT
+    ):
         super().__init__(id, state_name, prompt)
         self.message_cache: List[List[object]] = []
 
@@ -493,7 +576,8 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         self.message_cache.clear()
         return super().reset_state(q)
 
-    async def send_message(self, message: str, chatuser: str = user) -> None:
+    async def send_message(self, message: str, chatuser: str = None) -> None:
+        chatuser = self.prompt.user if chatuser is None else chatuser
         if "-temp=" in message:
             temperature = float(message.split("-temp=")[1].split(" ")[0])
             message = message.replace("-temp=" + f"{temperature:g}", "")
@@ -514,17 +598,18 @@ class RWKVGroupChater(RWKVChaterEmbryo):
 
     async def get_answer(
         self,
-        nickname: str = bot,
+        nickname: str = None,
     ) -> str:
+        nickname = self.prompt.bot if nickname is None else nickname
         await self.process_tokens(await self.gen_prompt(self.message_cache))
         self.message_cache.clear()
 
-        answer = await self.gen_future(end_of="\n\n")
+        answer, original = await self.gen_future(end_of="\n\n")
         await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
-        answer = answer.replace(bot, nickname).strip()
+        answer = answer.replace(self.prompt.bot, nickname).strip()
 
-        return answer
+        return answer, original
 
 
 # ======================================= Nickname Gener ==========================================
@@ -533,7 +618,9 @@ class RWKVGroupChater(RWKVChaterEmbryo):
 class RWKVNicknameGener(RWKVEmbryo):
     def __init__(self):
         super().__init__(
-            "-G_RWKVNickNameGener_G", "-S_RWKVNickNameGener_S", NICKGENER_PROMPT
+            "-G_RWKVNickNameGener_G",
+            "-S_RWKVNickNameGener_S",
+            RWKVPrompt(NICKGENER_PROMPT),
         )
         self.temperature: float = 0.3
         self.top_p: float = 0.1
@@ -547,10 +634,10 @@ class RWKVNicknameGener(RWKVEmbryo):
         self.state.processed_tokens_counts = {}
         new = f"{name}\n"
         await self.process_tokens(tokenizer.encode(new))
-        answer = await self.gen_future(max_len=10, end_of="\n\n")
+        answer, original = await self.gen_future(max_len=10, end_of="\n\n")
 
         await self.reset_state(q=True)
-        return answer
+        return answer, original
 
 
 # ========================================== Other ================================================
@@ -561,7 +648,7 @@ async def process_default_state():
         prxxx("Default state was processed")
     else:
         await RWKVChater(
-            id="chat-model", state_name=MODEL_STATE_NAME, prompt=default_init_prompt
+            id="chat-model", state_name=MODEL_STATE_NAME, prompt=RWKVPrompt()
         ).init_state()
 
 

@@ -1,6 +1,7 @@
 import time, re, random, os, sys
 from typing import Callable
 import asyncio
+import string
 
 def prxxx(*args, q: bool = False, from_debug=False, **kwargs):
     if q:
@@ -49,7 +50,7 @@ def clean_symbols(s):
 
 
 def gen_echo():
-    return "%4.x" % random.randint(0, 65535)
+    return "".join(random.sample(string.ascii_lowercase + string.digits, 4))
 
 
 def check_dir(path):

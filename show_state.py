@@ -3,21 +3,27 @@ import matplotlib.pyplot as plt
 from rwkv import RWKVState
 
 
-def show_att_state(state: np.ndarray, norm=True, only_std=False):
+def show_att_state(model, state: np.ndarray, norm=True, only_std=False):
     # 恢复形状
-    state = state.reshape(24, -1, 2048)
+    n_embed = model.n_embed
+    n_layer = model.n_layer
+    head_size = state.size // model.n_layer // n_embed -2
+    n_head = n_embed // head_size
+
+    state = state.reshape(n_layer, -1, n_embed)
     state = state[::, 2::, ::]
-    state = state.reshape(24, 32, 64, 64)
+    state = state.reshape(n_layer, n_head, head_size, head_size)
 
     if norm or only_std:
         std = state.std(axis=(2, 3))
     if only_std:
-        ax = plt.matshow(np.log10(std))
+        ax = plt.matshow(std, norm="log")
         plt.colorbar(ax.colorbar)
-        plt.show()
+        plt.pause(2)
+        plt.close()
         return
     if norm:  # 归一化，state的mean是0
-        state = state / (std.reshape(24, 32, 1, 1) / 2)
+        state = state / (std.reshape(n_layer, n_head, 1, 1) / 2)
 
     state = np.pad(
         state,
@@ -26,27 +32,31 @@ def show_att_state(state: np.ndarray, norm=True, only_std=False):
         constant_values=(float("nan"), float("nan")),
     )
     state = state.transpose(0, 2, 1, 3)
-    state = state.reshape(24 * 66, 32 * 66)
-    state = np.log10(1 + state.clip(min=0)) - np.log10(1 - state.clip(max=0))
-    # state = np.tanh(state)
-    # state = np.clip(np.cbrt(state), -10, 10)
-
-    ax = plt.matshow(state)
+    state = state.reshape(n_layer * 66, n_head * 66)
+    ax = plt.matshow(state, norm="asinh")
     plt.colorbar(ax.colorbar)
-    plt.show()
+    plt.pause(2)
+    plt.close()
 
 
-def show_xx_state(state: np.ndarray):
-    state = state.reshape(24, -1, 2048)
+def show_xx_state(model, state: np.ndarray):
+    n_embed = model.n_embed
+    n_layer = model.n_layer
+    head_size = state.size // model.n_layer // n_embed -2
+    n_head = n_embed // head_size
+
+    state = state.reshape(n_layer, -1, n_embed)
     state = state[::, :2:, ::]
-    state = state.reshape(48, 2048)
+    state = state.reshape(n_layer * 2, n_embed)
     ax = plt.matshow(state)
     plt.colorbar(ax.colorbar)
-    plt.show()
+    plt.pause(2)
+    plt.close()
 
 
 class show_state_delta:
-    def __init__(self, state: RWKVState) -> None:
+    def __init__(self, model, state: RWKVState) -> None:
+        self.model = model
         self.state: RWKVState = state
         self.state_cache: np.ndarray = None
 
@@ -54,5 +64,6 @@ class show_state_delta:
         self.state_cache = self.state.state.copy()
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        show_att_state(self.state.state - self.state_cache, only_std=True)
+        show_att_state(self.model, self.state.state - self.state_cache, only_std=True)
         del self.state_cache
+

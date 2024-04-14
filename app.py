@@ -42,16 +42,19 @@ async def save_chaters_state():
         group_chaters, desc="Save grpup chater", leave=False, unit="chr"
     ):
         await asyncio.sleep(0)
-        await group_chaters[id].save_state(id, q=True)
-
+        await group_chaters[id].save_state(id, q=False)
 
 def save_chaters_state_sync():
     for id in tqdm.tqdm(chaters, desc="Save chater", leave=False, unit="chr"):
-        chaters[id].state.save_sync(id)
+        if chaters[id].need_save:
+            chaters[id].state.save_sync(id)
+            prxxx(f"Save state   name: {id}")
     for id in tqdm.tqdm(
         group_chaters, desc="Save grpup chater", leave=False, unit="chr"
     ):
-        group_chaters[id].state.save_sync(id)
+        if group_chaters[id].need_save:
+            group_chaters[id].state.save_sync(id)
+            prxxx(f"Save state   name: {id}")
 
 
 async def time_to_save():
@@ -78,12 +81,13 @@ async def chat(
         await chaters[id].init_state()
 
     prxxx(f" #    Chat   id: {id} | user: {user} | echo: {echo}")
-    prxxx(f" #    -->[{message}]-{echo}")
-    answer = await chaters[id].chat(
+    prxxx(f" #    -M->[{message}]-{echo}")
+    answer, original = await chaters[id].chat(
         message=message, chatuser=user, nickname=nickname, debug=debug
     )
     prxxx(f" #    Chat   id: {id} | nickname: {nickname} | echo: {echo}")
-    prxxx(f" #  {echo}-[{answer}]<--")
+    prxxx(f" #    {echo}-[{answer}]<-A-")
+    prxxx(f" #    {echo}-[{original}]<-O-")
 
     # 如果接受到的内容为空，则给出相应的回复
     if answer.isspace() or len(answer) == 0:
@@ -109,7 +113,7 @@ async def group_chat_send(
         await group_chaters[id].init_state()
 
     prxxx(f" #    Send Gchat   id: {id} | user: {user} | echo: {echo}")
-    prxxx(f" #    -->[{message}]-{echo}")
+    prxxx(f" #    -M->[{message}]-{echo}")
     await group_chaters[id].send_message(message=message, chatuser=user)
 
 
@@ -126,9 +130,10 @@ async def group_chat_get(
         group_chaters[id] = RWKVGroupChater(id, state_name=state)
         await group_chaters[id].init_state()
 
-    answer = await group_chaters[id].get_answer(nickname=nickname)
+    answer, original = await group_chaters[id].get_answer(nickname=nickname)
     prxxx(f" #    Get gchat   id: {id} | nickname: {nickname} | echo: {echo}")
-    prxxx(f" #  {echo}-[{answer}]<--")
+    prxxx(f" #    {echo}-[{answer}]<-A-")
+    prxxx(f" #    {echo}-[{original}]<-O-")
 
     # 如果接受到的内容为空，则给出相应的回复
     if answer.isspace() or len(answer) == 0:
@@ -140,10 +145,10 @@ async def gen_nickname(name: str):
     echo = gen_echo()
     prxxx()
     prxxx(f" #    GenNickname   echo: {echo}")
-    prxxx(f" #    -->[{name}]-{echo}")
-    nickname = await nicknameGener.gen_nickname(name)
+    prxxx(f" #    -N->[{name}]-{echo}")
+    nickname, _ = await nicknameGener.gen_nickname(name)
     prxxx(f" #    GenNickname   echo: {echo}")
-    prxxx(f" #  {echo}-[{nickname}]<--")
+    prxxx(f" #  {echo}-[{nickname}]<-N-")
 
     # 如果接受到的内容为空，则给出相应的回复
     if nickname.isspace() or len(nickname) == 0 or nickname == "None":
