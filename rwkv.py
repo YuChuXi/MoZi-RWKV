@@ -413,41 +413,40 @@ class RWKVEmbryo:
             for token in tqdm.tqdm(
                 tokens, desc="Processing prompt", leave=False, unit=" tok"
             ):
-                if self.have_interrupt:
-                    self.clean_interrupt()
-                    break
                 await self.process_token(token)
         return self.state.logits, self.state.state
 
     async def gen_future(
-        self, max_len: int = MAX_GENERATION_LENGTH, end_of: str = "\n\n"
+        self,
+        head: List[int] = [],
+        max_len: int = MAX_GENERATION_LENGTH,
+        end_of: str = "\n\n",
     ) -> str:
+        len_head = len(head)
+        logits = None
         answer: bytes = b""
         end: bytes = end_of.encode("utf-8")
 
-        if self.is_busy():
-            self.interrupt()
-
         async with self.state_lock:
             for i in tqdm.trange(
-                max_len,
+                max(max_len, len_head),
                 desc="Processing future",
                 leave=False,
                 unit=" tok",
             ):
-                if self.have_interrupt:
-                    self.clean_interrupt()
-                    break
                 await asyncio.sleep(0)
-                logits = self.state.logits
-                logits = await self.process_token_penalty(logits)
-                token: int = sampling.sample_logits(
-                    logits, self.temperature, self.top_p
-                )
-                answer += tokenizer.decodeBytes([token])
-                await self.process_token(token)
-                if end in answer:
-                    break
+                if i < len_head:
+                    token = head[i]
+                    logits, _ = await self.process_token(token)
+                else:
+                    logits = await self.process_token_penalty(logits)
+                    token: int = sampling.sample_logits(
+                        logits, self.temperature, self.top_p
+                    )
+                    logits, _ = await self.process_token(token)
+                    answer += tokenizer.decodeBytes([token])
+                    if end in answer:
+                        break
 
         self.need_save = True
         answer = answer.decode("utf-8", errors="ignore").strip()
@@ -484,10 +483,11 @@ class RWKVChaterEmbryo(RWKVEmbryo):
             for m in message_list
             if now_time - m[2] <= time_limit
         ]
+        """
         tokens_list.append(
             tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
         )
-
+        """
         prompt = []
         for tl in tokens_list[::-1]:
             len_token = len(tl)
@@ -541,16 +541,26 @@ class RWKVChater(RWKVChaterEmbryo):
 
             with show_state_delta(model, self.state):
                 if message != "+":
-                    new = f"{chatuser}{self.prompt.separator} {message}\n\n{nickname}{self.prompt.separator}"
-                    await self.process_tokens(tokenizer.encode(new))
-
-                answer, original = await self.gen_future(end_of="\n\n")
+                    prompt = f"{chatuser}{self.prompt.separator} {message}\n\n"
+                    await self.process_tokens(tokenizer.encode(prompt))
+                if self.have_interrupt:
+                    self.clean_interrupt()
+                    await self.state.mix_inplace(
+                        state_cache[self.default_state], OBSTINATE
+                    )
+                    raise Exception
+                head = tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
+                answer, original = await self.gen_future(head=head, end_of="\n\n")
         else:
             if message != "+":
-                new = f"{chatuser}{self.prompt.separator} {message}\n\n{nickname}{self.prompt.separator}"
-                await self.process_tokens(tokenizer.encode(new))
-
-            answer, original = await self.gen_future(end_of="\n\n")
+                prompt = f"{chatuser}{self.prompt.separator} {message}\n\n"
+                await self.process_tokens(tokenizer.encode(prompt))
+            if self.have_interrupt:
+                self.clean_interrupt()
+                await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
+                raise Exception
+            head = tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
+            answer, original = await self.gen_future(head=head, end_of="\n\n")
         await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
         # await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
@@ -602,7 +612,8 @@ class RWKVGroupChater(RWKVChaterEmbryo):
         await self.process_tokens(await self.gen_prompt(self.message_cache))
         self.message_cache.clear()
 
-        answer, original = await self.gen_future(end_of="\n\n")
+        head = tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
+        answer, original = await self.gen_future(head=head, end_of="\n\n")
         await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
         answer = answer.replace(self.prompt.bot, nickname).strip()
