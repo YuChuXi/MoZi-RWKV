@@ -201,8 +201,8 @@ class RWKVPrompt:
         return "None" if self.prompt is None else self.get_preview(self.prompt)
 
     def get_preview(self, string):
-        string = string.strip().replace("\n","\\n")
-        return string[:min(16,len(string))]
+        string = string.strip().replace("\n", "\\n")
+        return string[: min(16, len(string))]
 
     def process_ignore(self, string):
         if self.ignore is None or self.ignore == "":
@@ -222,7 +222,7 @@ class RWKVEmbryo:
         self,
         id: str,
         state_name: str = MODEL_STATE_NAME,
-        prompt: str | RWKVPrompt = DEFAULT_PROMPT,
+        prompt: RWKVPrompt = DEFAULT_PROMPT,
     ):
         check_dir(f"data/{id}")
         assert len(id) > 0, "ID must not be empty"
@@ -531,12 +531,10 @@ class RWKVChater(RWKVChaterEmbryo):
 
         if "+reset" in message:
             await self.reset_state()
-            return " : Done"
+            return " : Done", " : Done"
 
         message = message.replace(chatuser, self.prompt.user)
-        message = message.replace(
-            nickname, self.prompt.bot
-        )  # .strip() # 昵称和提示词不一定一致
+        message = message.replace(nickname, self.prompt.bot)  # .strip() # 昵称和提示词不一定一致
 
         if debug:
             from show_state import show_state_delta
