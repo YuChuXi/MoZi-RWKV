@@ -4,3 +4,5 @@ model/*
 *.pyc
 *.bak
 =*
+prompt/*MoZi*
+prompt/*mozi*
