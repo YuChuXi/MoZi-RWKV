@@ -162,7 +162,6 @@ state_cache: Dict[str, RWKVState] = {}
 
 # ========================================= Embryo prompt =========================================
 
-
 class RWKVPrompt:
     def __init__(
         self,
@@ -211,11 +210,13 @@ class RWKVPrompt:
             self.ignore = re.compile(self.ignore)
         return self.ignore.sub("", string)
 
+DEFAULT_PROMPT = RWKVPrompt()
+
 
 # ============================================ Embryo =============================================
 
-DEFAULT_PROMPT = RWKVPrompt()
-
+class RWKVInterruptException(Exception):
+    pass
 
 class RWKVEmbryo:
     def __init__(
@@ -548,7 +549,7 @@ class RWKVChater(RWKVChaterEmbryo):
                     await self.state.mix_inplace(
                         state_cache[self.default_state], OBSTINATE
                     )
-                    raise Exception
+                    raise RWKVInterruptException
                 head = tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
                 answer, original = await self.gen_future(head=head, end_of="\n\n")
         else:
@@ -558,7 +559,7 @@ class RWKVChater(RWKVChaterEmbryo):
             if self.have_interrupt:
                 self.clean_interrupt()
                 await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
-                raise Exception
+                raise RWKVInterruptException
             head = tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
             answer, original = await self.gen_future(head=head, end_of="\n\n")
         await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)

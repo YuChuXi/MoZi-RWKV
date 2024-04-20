@@ -2,6 +2,7 @@ import time, re, random, os, sys
 from typing import Callable
 import asyncio
 import string
+import quart
 
 def prxxx(*args, q: bool = False, from_debug=False, **kwargs):
     if q:

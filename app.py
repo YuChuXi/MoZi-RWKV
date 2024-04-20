@@ -4,7 +4,13 @@ from quart import Quart, websocket, request
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 import asyncio
-from rwkv import RWKVChater, RWKVNicknameGener, RWKVGroupChater, process_default_state
+from rwkv import (
+    RWKVChater,
+    RWKVNicknameGener,
+    RWKVGroupChater,
+    RWKVInterruptException,
+    process_default_state,
+)
 from app_util import prxxx, gen_echo, clean_symbols
 from typing import Dict
 from config import MODEL_STATE_NAME, APP_BIND, APP_AUTOSAVE_TIME, APP_TEST_MESSAGE
@@ -44,6 +50,7 @@ async def save_chaters_state():
         await asyncio.sleep(0)
         await group_chaters[id].save_state(id, q=False)
 
+
 def save_chaters_state_sync():
     for id in tqdm.tqdm(chaters, desc="Save chater", leave=False, unit="chr"):
         if chaters[id].need_save:
@@ -72,19 +79,22 @@ async def chat(
     nickname: str = "墨子",
     state: str = MODEL_STATE_NAME,
     debug=False,
+    echo=None,
 ) -> str:
     id = clean_symbols(id)
-    echo = gen_echo()
+
     prxxx()
+    echo = gen_echo()
     if not id in chaters:
         chaters[id] = RWKVChater(id, state_name=state)
         await chaters[id].init_state()
-
     prxxx(f" #    Chat   id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -M->[{message}]-{echo}")
     answer, original = await chaters[id].chat(
         message=message, chatuser=user, nickname=nickname, debug=debug
     )
+
+    prxxx()
     prxxx(f" #    Chat   id: {id} | nickname: {nickname} | echo: {echo}")
     prxxx(f" #    {echo}-[{answer}]<-A-")
     prxxx(f" #    {echo}-[{original}]<-O-")
@@ -100,18 +110,18 @@ async def group_chat_send(
     id: str = "-b2bi0JgEhJru87HTcRjh9vdT",
     user: str = "木子",
     state: str = MODEL_STATE_NAME,
+    echo=None,
 ) -> str:
     id = clean_symbols(id)
 
     if len(message) == 0:
         return
 
-    echo = gen_echo()
     prxxx()
+    echo = gen_echo()
     if not id in group_chaters:
         group_chaters[id] = RWKVGroupChater(id, state_name=state)
         await group_chaters[id].init_state()
-
     prxxx(f" #    Send Gchat   id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -M->[{message}]-{echo}")
     await group_chaters[id].send_message(message=message, chatuser=user)
@@ -121,6 +131,7 @@ async def group_chat_get(
     id: str = "-b2bi0JgEhJru87HTcRjh9vdT",
     nickname: str = "墨子",
     state: str = MODEL_STATE_NAME,
+    echo=None,
 ) -> str:
     id = clean_symbols(id)
 
@@ -141,7 +152,7 @@ async def group_chat_get(
     return answer
 
 
-async def gen_nickname(name: str):
+async def gen_nickname(name: str, echo=None):
     echo = gen_echo()
     prxxx()
     prxxx(f" #    GenNickname   echo: {echo}")
@@ -156,7 +167,7 @@ async def gen_nickname(name: str):
     return nickname
 
 
-async def reset_state(id: str):
+async def reset_state(id: str, echo=None):
     id = clean_symbols(id)
     flag = False
     if id in chaters:
@@ -174,8 +185,11 @@ async def R_chat():
         kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
-    answer = await chat(**kwargs)
-    return {"message": answer, "state": "ok"}
+    try:
+        answer = await chat(**kwargs)
+        return {"message": answer, "state": "ok"}
+    except RWKVInterruptException:
+        return {"state": "interrupted"}
 
 
 @app.route("/group_chat_send", methods=["POST", "GET"])
@@ -264,10 +278,17 @@ async def W_chat():
             debug*
         }
         """
-        answer = await chat(**data)
-        await websocket.send(
-            json.dumps({"message": answer, "state": "OK", "echo": data.get("echo", "")})
-        )
+        try:
+            answer = await chat(**data)
+            await websocket.send(
+                json.dumps(
+                    {"message": answer, "state": "OK", "echo": data.get("echo", "")}
+                )
+            )
+        except RWKVInterruptException:
+            await websocket.send(
+                json.dumps({"state": "interrupted", "echo": data.get("echo", "")})
+            )
 
 
 @app.websocket("/group_chat")
