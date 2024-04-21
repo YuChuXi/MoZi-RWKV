@@ -83,11 +83,13 @@ async def chat(
 ) -> str:
     id = clean_symbols(id)
 
-    prxxx()
     echo = gen_echo()
     if not id in chaters:
+        prxxx()
         chaters[id] = RWKVChater(id, state_name=state)
         await chaters[id].init_state()
+    
+    prxxx()
     prxxx(f" #    Chat   id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -M->[{message}]-{echo}")
     answer, original = await chaters[id].chat(
@@ -117,11 +119,13 @@ async def group_chat_send(
     if len(message) == 0:
         return
 
-    prxxx()
     echo = gen_echo()
     if not id in group_chaters:
+        prxxx()
         group_chaters[id] = RWKVGroupChater(id, state_name=state)
         await group_chaters[id].init_state()
+
+    prxxx()
     prxxx(f" #    Send Gchat   id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -M->[{message}]-{echo}")
     await group_chaters[id].send_message(message=message, chatuser=user)
@@ -136,12 +140,14 @@ async def group_chat_get(
     id = clean_symbols(id)
 
     echo = gen_echo()
-    prxxx()
     if not id in group_chaters:
+        prxxx()
         group_chaters[id] = RWKVGroupChater(id, state_name=state)
         await group_chaters[id].init_state()
 
     answer, original = await group_chaters[id].get_answer(nickname=nickname)
+
+    prxxx()
     prxxx(f" #    Get gchat   id: {id} | nickname: {nickname} | echo: {echo}")
     prxxx(f" #    {echo}-[{answer}]<-A-")
     prxxx(f" #    {echo}-[{original}]<-O-")
@@ -158,6 +164,8 @@ async def gen_nickname(name: str, echo=None):
     prxxx(f" #    GenNickname   echo: {echo}")
     prxxx(f" #    -N->[{name}]-{echo}")
     nickname, _ = await nicknameGener.gen_nickname(name)
+
+    prxxx()
     prxxx(f" #    GenNickname   echo: {echo}")
     prxxx(f" #  {echo}-[{nickname}]<-N-")
 
