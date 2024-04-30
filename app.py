@@ -12,7 +12,7 @@ from rwkv import (
     process_default_state,
 )
 from app_util import prxxx, gen_echo, clean_symbols
-from typing import Dict
+from typing import Dict, Tuple
 from config import MODEL_STATE_NAME, APP_BIND, APP_AUTOSAVE_TIME, APP_TEST_MESSAGE
 from show_state import show_state_delta
 
@@ -80,7 +80,7 @@ async def chat(
     state: str = MODEL_STATE_NAME,
     debug=False,
     echo=None,
-) -> str:
+) -> Tuple[str, bool]:
     id = clean_symbols(id)
 
     echo = gen_echo()
@@ -88,23 +88,23 @@ async def chat(
         prxxx()
         chaters[id] = RWKVChater(id, state_name=state)
         await chaters[id].init_state()
-    
+
     prxxx()
     prxxx(f" #    Chat   id: {id} | user: {user} | echo: {echo}")
     prxxx(f" #    -M->[{message}]-{echo}")
-    answer, original = await chaters[id].chat(
+    answer, original, is_want_to_say = await chaters[id].chat(
         message=message, chatuser=user, nickname=nickname, debug=debug
     )
 
     prxxx()
     prxxx(f" #    Chat   id: {id} | nickname: {nickname} | echo: {echo}")
+    prxxx(f" #    {echo}-[{original}][{'FY'[is_want_to_say]}]<-O-")
     prxxx(f" #    {echo}-[{answer}]<-A-")
-    prxxx(f" #    {echo}-[{original}]<-O-")
 
     # 如果接受到的内容为空，则给出相应的回复
     if answer.isspace() or len(answer) == 0:
         answer = "喵喵喵？"
-    return answer
+    return answer, is_want_to_say
 
 
 async def group_chat_send(
@@ -113,7 +113,7 @@ async def group_chat_send(
     user: str = "木子",
     state: str = MODEL_STATE_NAME,
     echo=None,
-) -> str:
+) -> None:  # -> Tuple[str, bool]:
     id = clean_symbols(id)
 
     if len(message) == 0:
@@ -136,7 +136,7 @@ async def group_chat_get(
     nickname: str = "墨子",
     state: str = MODEL_STATE_NAME,
     echo=None,
-) -> str:
+) -> Tuple[str, bool]:
     id = clean_symbols(id)
 
     echo = gen_echo()
@@ -145,17 +145,19 @@ async def group_chat_get(
         group_chaters[id] = RWKVGroupChater(id, state_name=state)
         await group_chaters[id].init_state()
 
-    answer, original = await group_chaters[id].get_answer(nickname=nickname)
+    answer, original, is_want_to_say = await group_chaters[id].get_answer(
+        nickname=nickname
+    )
 
     prxxx()
     prxxx(f" #    Get gchat   id: {id} | nickname: {nickname} | echo: {echo}")
+    prxxx(f" #    {echo}-[{original}][{'FY'[is_want_to_say]}]<-O-")
     prxxx(f" #    {echo}-[{answer}]<-A-")
-    prxxx(f" #    {echo}-[{original}]<-O-")
 
     # 如果接受到的内容为空，则给出相应的回复
     if answer.isspace() or len(answer) == 0:
         answer = "喵喵喵？"
-    return answer
+    return answer, is_want_to_say
 
 
 async def gen_nickname(name: str, echo=None):
@@ -194,8 +196,8 @@ async def R_chat():
     elif request.method == "POST":
         kwargs = await request.form
     try:
-        answer = await chat(**kwargs)
-        return {"message": answer, "state": "ok"}
+        answer, is_want_to_say = await chat(**kwargs)
+        return {"message": answer, "is_want_to_say": is_want_to_say, "state": "ok"}
     except RWKVInterruptException:
         return {"state": "interrupted"}
 
@@ -216,8 +218,8 @@ async def R_group_chat_get():
         kwargs = request.args
     elif request.method == "POST":
         kwargs = await request.form
-    answer = await group_chat_get(**kwargs)
-    return {"message": answer, "state": "ok"}
+    answer, is_want_to_say = await group_chat_get(**kwargs)
+    return {"message": answer, "is_want_to_say": is_want_to_say, "state": "ok"}
 
 
 @app.route("/nickname", methods=["POST", "GET"])
@@ -287,10 +289,15 @@ async def W_chat():
         }
         """
         try:
-            answer = await chat(**data)
+            answer, is_want_to_say = await chat(**data)
             await websocket.send(
                 json.dumps(
-                    {"message": answer, "state": "OK", "echo": data.get("echo", "")}
+                    {
+                        "message": answer,
+                        "is_want_to_say": is_want_to_say,
+                        "state": "OK",
+                        "echo": data.get("echo", ""),
+                    }
                 )
             )
         except RWKVInterruptException:
@@ -320,10 +327,15 @@ async def W_group_chat():
                 json.dumps({"state": "OK", "echo": data.get("echo", "")})
             )
         elif data["action"] == "get":
-            answer = await group_chat_get(**data)
+            answer, is_want_to_say = await group_chat_get(**data)
             await websocket.send(
                 json.dumps(
-                    {"message": answer, "state": "OK", "echo": data.get("echo", "")}
+                    {
+                        "message": answer,
+                        "is_want_to_say": is_want_to_say,
+                        "state": "OK",
+                        "echo": data.get("echo", ""),
+                    }
                 )
             )
         else:

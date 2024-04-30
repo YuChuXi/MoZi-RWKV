@@ -7,17 +7,11 @@ def softmax(x: np.ndarray, axis: int):
     e: np.ndarray = np.exp(x)
     return e / e.sum(axis=axis, keepdims=True)
 
-def sample_logits(out, temperature: float = 1.0, top_p: float = 0.8, logit_bias: Dict[int, float] = None) -> int:
-    if hasattr(out, '__module__') and out.__module__ == 'torch':
-        out = out.cpu().numpy()
-
-    probs: np.ndarray = softmax(out, axis=-1)
-
-    return sample_probs(probs, temperature, top_p, logit_bias)
-
-def sample_probs(probs: np.ndarray, temperature: float = 1.0, top_p: float = 0.8, logit_bias: Dict[int, float] = None) -> int:
+def sample_probs(probs: np.ndarray, temperature: float = 1.0, top_p: float = 0.8, logit_bias: Dict[int, float] = None) -> np.ndarray:
     assert 0.0 <= temperature, 'temperature'
     assert 0.0 <= top_p <= 1.0, 'top_p'
+
+    probs = softmax(probs, axis=-1)
 
     if top_p == 0.0:
         top_p = 1.0
@@ -46,5 +40,11 @@ def sample_probs(probs: np.ndarray, temperature: float = 1.0, top_p: float = 0.8
         probs = np.power(probs, 1.0 / temperature)
 
     probs = probs / np.sum(probs)
+    return probs
 
+def sample_logits(out, temperature: float = 1.0, top_p: float = 0.8, logit_bias: Dict[int, float] = None) -> int:
+    if hasattr(out, '__module__') and out.__module__ == 'torch':
+        out = out.cpu().numpy()
+
+    probs = sample_probs(out, temperature, top_p, logit_bias)
     return np.random.choice(a=len(probs), p=probs)

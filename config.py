@@ -7,7 +7,7 @@ from typing import List
 # Sampling temperature. It could be a good idea to increase temperature when top_p is low.
 TEMPERATURE: float = 1.0
 # For better Q&A accuracy and less diversity, reduce top_p (to 0.5, 0.2, 0.1 etc.)
-TOP_P: float = 0.3
+TOP_P: float = 0.5
 # Penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
 PRESENCE_PENALTY: float = 0.0
 # Penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.

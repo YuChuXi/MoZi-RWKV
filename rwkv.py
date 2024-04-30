@@ -17,7 +17,7 @@ from rwkv_cpp import rwkv_cpp_shared_library, rwkv_cpp_model
 from rwkv_cpp.rwkv_world_tokenizer import RWKV_TOKENIZER
 
 # from tokenizer_util import get_tokenizer
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from app_util import (
     prxxx,
     check_dir,
@@ -48,12 +48,7 @@ from config import (
     NICKGENER_PROMPT,
 )
 
-library = rwkv_cpp_shared_library.load_rwkv_shared_library()
-prxxx(f"System info: {library.rwkv_get_system_info_string()}")
-prxxx(f"Loading RWKV model   file: model/{MODEL_NAME}.bin")
-model = rwkv_cpp_model.RWKVModel(
-    library, f"model/{MODEL_NAME}.bin", thread_count=THREADS
-)
+
 check_dir("data")
 if check_file(f"data/tokenizer.pkl"):
     prxxx(f"Loading tokenizer   file: data/tokenizer.pkl")
@@ -65,6 +60,12 @@ else:
     with open(f"data/tokenizer.pkl", "wb") as f:
         pickle.dump(tokenizer, f)
 
+library = rwkv_cpp_shared_library.load_rwkv_shared_library()
+prxxx(f"System info: {library.rwkv_get_system_info_string()}")
+prxxx(f"Loading RWKV model   file: model/{MODEL_NAME}.bin")
+model = rwkv_cpp_model.RWKVModel(
+    library, f"model/{MODEL_NAME}.bin", thread_count=THREADS
+)
 
 # ========================================= Embryo states =========================================
 
@@ -90,7 +91,8 @@ class RWKVState:
                 },
                 f,
             )
-        np.save(f"data/{state_name}/state.npy", self.state)
+        np.save(f"data/{state_name}/state.npy", (np.arcsinh(self.state) * 24).clip(-128,127).astype(np.int8))
+        #np.save(f"data/{state_name}/state.npy", self.state)
         return self
 
     def save_sync(self, state_name: str):
@@ -104,7 +106,8 @@ class RWKVState:
                 },
                 f,
             )
-        np.save(f"data/{state_name}/state.npy", self.state)
+        np.save(f"data/{state_name}/state.npy", (np.arcsinh(self.state) * 24).clip(-128,127).astype(np.int8))
+        #np.save(f"data/{state_name}/state.npy", self.state)
         return self
 
     @run_in_async_thread
@@ -118,8 +121,8 @@ class RWKVState:
         self.processed_tokens: List[int] = data["processed_tokens"]
         self.logits: np.ndarray = data["logits"]
         self.processed_tokens_counts: Dict[int, int] = data["processed_tokens_counts"]
-        self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
-
+        self.state: np.ndarray = np.sinh(np.load(f"data/{state_name}/state.npy").astype(np.float32) / 24)
+        #self.state: np.ndarray = np.load(f"data/{state_name}/state.npy")
         return self
 
     @run_in_async_thread
@@ -161,6 +164,7 @@ state_cache: Dict[str, RWKVState] = {}
 
 
 # ========================================= Embryo prompt =========================================
+
 
 class RWKVPrompt:
     def __init__(
@@ -210,13 +214,16 @@ class RWKVPrompt:
             self.ignore = re.compile(self.ignore)
         return self.ignore.sub("", string)
 
+
 DEFAULT_PROMPT = RWKVPrompt()
 
 
 # ============================================ Embryo =============================================
 
+
 class RWKVInterruptException(Exception):
     pass
+
 
 class RWKVEmbryo:
     def __init__(
@@ -235,6 +242,7 @@ class RWKVEmbryo:
             RWKVPrompt(prompt) if isinstance(prompt, str) else prompt
         )
         self.default_state: str = state_name
+        self.debug = False
 
         self.state: RWKVState = RWKVState()
         self.state_lock: asyncio.Lock = asyncio.Lock()
@@ -262,7 +270,7 @@ class RWKVEmbryo:
         prompt: RWKVPrompt = DEFAULT_PROMPT,
         reprompt=False,
         q: bool = False,
-    ):
+    ) -> None:
         self.mlog.write(f"\n\n : Load[{state_name}]".encode("utf-8"))
         if (prompt is not None) and (
             reprompt
@@ -299,7 +307,9 @@ class RWKVEmbryo:
             break
 
     @log_call
-    async def save_state(self, state_name: str, must: bool = False, q: bool = False):
+    async def save_state(
+        self, state_name: str, must: bool = False, q: bool = False
+    ) -> None:
         if self.need_save or must:
             async with self.state_lock:
                 await self.state.save(state_name)
@@ -308,24 +318,29 @@ class RWKVEmbryo:
         self.mlog.flush()
 
     @log_call
-    async def reset_state(self, q: bool = False):
+    async def reset_state(self, q: bool = False) -> None:
         await self.load_state(self.default_state, q=q)
         await self.save_state(self.id, must=True, q=q)
 
-    async def init_state(self):
+    async def init_state(self) -> None:
         await self.load_state(self.id, self.prompt)
 
     def is_busy(self) -> bool:
         return self.state_lock.locked()
 
-    def interrupt(self):
+    def interrupt(self) -> None:
         self.have_interrupt = True
 
-    def clean_interrupt(self):
+    def clean_interrupt(self) -> None:
         self.have_interrupt = False
 
     @log_call
     async def check_state(self):
+        return
+        tt = list(np.where(sampling.sample_probs(self.state.logits.copy()) > 0)[0])
+        if tt[0] == 0:
+            tt = tt[1:]
+        print(tokenizer.decode(tt))
         return
         logit = self.logits[self.logits >= 0]
         prxxx("logits", logit[-128:])
@@ -361,7 +376,7 @@ class RWKVEmbryo:
         # self.frequency_penalty = s_var/36
 
     @log_call
-    async def process_processed_tokens_counts(self, token: int):
+    async def process_processed_tokens_counts(self, token: int) -> None:
         self.state.processed_tokens.append(token)
         if token not in self.state.processed_tokens_counts:  # 词频统计
             self.state.processed_tokens_counts[token] = 1
@@ -386,7 +401,7 @@ class RWKVEmbryo:
         return logits
 
     @log_call
-    async def process_token(self, token: int):
+    async def process_token(self, token: int) -> Tuple[np.ndarray, np.ndarray]:
         await asyncio.sleep(0)
         self.state.logits, self.state.state = model.eval(
             token, self.state.state, self.state.state, self.state.logits
@@ -399,7 +414,7 @@ class RWKVEmbryo:
         return self.state.logits, self.state.state
 
     @log_call
-    async def process_tokens(self, tokens: List[int]):
+    async def process_tokens(self, tokens: List[int]) -> Tuple[np.ndarray, np.ndarray]:
         """
         self.logits, self.state = model.eval_sequence(
             tokens, self.state, self.state, self.logits, use_numpy=True)
@@ -422,7 +437,7 @@ class RWKVEmbryo:
         head: List[int] = [],
         max_len: int = MAX_GENERATION_LENGTH,
         end_of: str = "\n\n",
-    ) -> str:
+    ) -> Tuple[str, str]:
         len_head = len(head)
         logits = None
         answer: bytes = b""
@@ -471,7 +486,7 @@ class RWKVChaterEmbryo(RWKVEmbryo):
         message_list: List[List[object]],
         time_limit: float = 1800,
         ctx_limit: int = 1024,
-    ):
+    ) -> List[int]:
         """
         [
             [[],[],float],
@@ -500,6 +515,12 @@ class RWKVChaterEmbryo(RWKVEmbryo):
 
         return prompt
 
+    async def is_want_to_say(self, head: List[int]) -> bool:
+        probs = sampling.sample_probs(
+            self.state.logits.copy(), self.temperature, self.top_p
+        )
+        return float(probs[head[0]]) > 0
+
 
 # ============================================ Chater =============================================
 
@@ -516,7 +537,8 @@ class RWKVChater(RWKVChaterEmbryo):
         chatuser: str = None,
         nickname: str = None,
         debug: bool = False,
-    ):
+    ) -> Tuple[str, str, bool]:
+        self.debug = debug
         chatuser = self.prompt.user if chatuser is None else chatuser
         nickname = self.prompt.bot if nickname is None else nickname
 
@@ -535,40 +557,27 @@ class RWKVChater(RWKVChaterEmbryo):
             return " : Done", " : Done"
 
         message = message.replace(chatuser, self.prompt.user)
-        message = message.replace(nickname, self.prompt.bot)  # .strip() # 昵称和提示词不一定一致
+        message = message.replace(
+            nickname, self.prompt.bot
+        )  # .strip() # 昵称和提示词不一定一致
+        head = tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
 
-        if debug:
-            from show_state import show_state_delta
+        if message != "+":
+            prompt = f"{chatuser}{self.prompt.separator} {message}\n\n"
+            await self.process_tokens(tokenizer.encode(prompt))
+        if self.have_interrupt:
+            self.clean_interrupt()
+            await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
+            raise RWKVInterruptException
 
-            with show_state_delta(model, self.state):
-                if message != "+":
-                    prompt = f"{chatuser}{self.prompt.separator} {message}\n\n"
-                    await self.process_tokens(tokenizer.encode(prompt))
-                if self.have_interrupt:
-                    self.clean_interrupt()
-                    await self.state.mix_inplace(
-                        state_cache[self.default_state], OBSTINATE
-                    )
-                    raise RWKVInterruptException
-                head = tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
-                answer, original = await self.gen_future(head=head, end_of="\n\n")
-        else:
-            if message != "+":
-                prompt = f"{chatuser}{self.prompt.separator} {message}\n\n"
-                await self.process_tokens(tokenizer.encode(prompt))
-            if self.have_interrupt:
-                self.clean_interrupt()
-                await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
-                raise RWKVInterruptException
-            head = tokenizer.encode(f"{self.prompt.bot}{self.prompt.separator}")
-            answer, original = await self.gen_future(head=head, end_of="\n\n")
+        answer, original = await self.gen_future(head=head, end_of="\n\n")
         await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
         # await self.state.mix_inplace(state_cache[self.default_state], OBSTINATE)
 
         answer = answer.replace(self.prompt.user, chatuser)
         answer = answer.replace(self.prompt.bot, nickname).strip()
 
-        return answer, original
+        return answer, original, await self.is_want_to_say(head)
 
 
 # ========================================= Group Chater ==========================================
@@ -608,7 +617,7 @@ class RWKVGroupChater(RWKVChaterEmbryo):
     async def get_answer(
         self,
         nickname: str = None,
-    ) -> str:
+    ) -> Tuple[str, str, bool]:
         nickname = self.prompt.bot if nickname is None else nickname
         await self.process_tokens(await self.gen_prompt(self.message_cache))
         self.message_cache.clear()
@@ -619,7 +628,7 @@ class RWKVGroupChater(RWKVChaterEmbryo):
 
         answer = answer.replace(self.prompt.bot, nickname).strip()
 
-        return answer, original
+        return answer, original, await self.is_want_to_say(head)
 
 
 # ======================================= Nickname Gener ==========================================
